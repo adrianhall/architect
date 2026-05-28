@@ -1,0 +1,16 @@
+{
+    "name": "architect",
+    "version": "1.0.0",
+    "description": "A web app for designing Cloudflare system architectures",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "check": "run-s check:*",
+        "check:markdown": "markdownlint-cli2 'docs/*.md' 'docs/issues/*.md' '#node_modules'"
+    },
+    "devDependencies": {
+        "markdownlint-cli2": "0.22.1",
+        "npm-run-all2": "9.0.1"
+    }
+}
