@@ -14,13 +14,13 @@ import { describe, expect, it } from "vitest";
  */
 describe("worker entry point", () => {
 	it("exports a default app with a fetch handler", async () => {
-		const mod = await import("./index.js");
+		const mod = await import("../index.js");
 		expect(mod.default).toBeDefined();
 		expect(typeof mod.default.fetch).toBe("function");
 	});
 
 	it("redirects unauthenticated requests to protected routes to the login form", async () => {
-		const mod = await import("./index.js");
+		const mod = await import("../index.js");
 		// /api/me is a protected path (matches /api/* policy with authenticate: true).
 		// Without a JWT header or cookie, developerAuthentication redirects to /_auth/login.
 		const res = await mod.default.fetch(new Request("http://localhost/api/me"), env);

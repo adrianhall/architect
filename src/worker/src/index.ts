@@ -1,25 +1,7 @@
 import { Hono } from "hono";
-import { type AuthVariables, cfAccessMiddleware, devAuthMiddleware } from "./middleware/auth";
+import { cfAccessMiddleware, devAuthMiddleware } from "./middleware/auth";
 import { loggerMiddleware } from "./middleware/logger";
-
-/**
- * Worker environment bindings.
- *
- * Declared inline here rather than relying on the generated
- * `worker-configuration.d.ts` (which lives outside the TypeScript `include`
- * path and is absent on a clean checkout). Must stay in sync with
- * `wrangler.jsonc.tpl` and `src/test/env.d.ts`.
- */
-type WorkerBindings = {
-	/** D1 database binding. */
-	DB: D1Database;
-	/** Workers Assets binding — serves the built React SPA. */
-	ASSETS: Fetcher;
-	/** Cloudflare Access team domain (e.g. `myteam.cloudflareaccess.com`). */
-	CLOUDFLARE_TEAM_DOMAIN: string;
-	/** Email address seeded as the initial admin on first deploy. */
-	SEED_ADMIN_EMAIL: string;
-};
+import type { WorkerEnv } from "./types";
 
 /**
  * CF-Architect Hono application.
@@ -36,10 +18,7 @@ type WorkerBindings = {
  * catch-all at the bottom serves the built React SPA via the Workers Assets
  * binding for all paths not matched by an API route.
  */
-const app = new Hono<{
-	Bindings: WorkerBindings;
-	Variables: AuthVariables & { requestId: string };
-}>();
+const app = new Hono<WorkerEnv>();
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
@@ -48,8 +27,7 @@ app.use(devAuthMiddleware);
 app.use(cfAccessMiddleware);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-// API routes are added in ISSUE-05 and later. Placeholder kept here so the
-// file compiles cleanly before routes exist.
+// API routes are added in ISSUE-05 and later.
 
 // ── Asset catch-all ───────────────────────────────────────────────────────────
 
