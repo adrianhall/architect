@@ -33,7 +33,7 @@
 		"precheck:types": "tsc -b",
 		"predeploy": "run-s generate:types build:frontend db:migrate:remote",
 		"preprovision": "terraform -chdir=infra init",
-		"prestart": "run-s generate:types build:frontend",
+		"prestart": "run-s generate:types build:frontend db:migrate:local",
 		"provision": "terraform -chdir=infra apply -auto-approve",
 		"start": "run-s start:worker",
 		"start:frontend": "npm run dev --workspace=src/frontend",
