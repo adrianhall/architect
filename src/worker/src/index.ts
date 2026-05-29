@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cfAccessMiddleware, devAuthMiddleware } from "./middleware/auth";
 import { loggerMiddleware } from "./middleware/logger";
+import { diagrams } from "./routes/diagrams";
 import { me } from "./routes/me";
 import { version } from "./routes/version";
 import type { WorkerEnv } from "./types";
@@ -17,16 +18,17 @@ import type { WorkerEnv } from "./types";
  *    production) and sets `userEmail` / `userSub` on the Hono context.
  *
  * Route mounting:
- * - `GET /api/version` — public; returns the application version.
- * - `GET /api/me`      — protected; returns the current user's profile,
- *   auto-provisioning a DB record on first request.
- * - `GET *`            — catch-all; proxies to the Workers Assets binding
- *   so the built React SPA is served for all non-API paths.
+ * - `GET /api/version`               — public; returns the application version.
+ * - `GET /api/me`                    — protected; returns the current user's
+ *   profile, auto-provisioning a DB record on first request.
+ * - `/api/diagrams`                  — protected; full diagram CRUD API
+ *   (create, list, get, update, rename, delete, duplicate).
+ * - `GET *`                          — catch-all; proxies to the Workers Assets
+ *   binding so the built React SPA is served for all non-API paths.
  *
  * Placeholder routes for future issues:
- * - `/api/catalog`  (ISSUE-08)
- * - `/api/diagrams` (ISSUE-06)
- * - `/api/admin`    (ISSUE-07)
+ * - `/api/catalog` (ISSUE-08)
+ * - `/api/admin`   (ISSUE-07)
  */
 const app = new Hono<WorkerEnv>();
 
@@ -43,11 +45,11 @@ app.use(cfAccessMiddleware);
 
 app.route("/api/version", version);
 app.route("/api/me", me);
+app.route("/api/diagrams", diagrams);
 
 // Placeholder routes for future issues:
-// app.route("/api/catalog", catalog);   // ISSUE-08
-// app.route("/api/diagrams", diagrams); // ISSUE-06
-// app.route("/api/admin", admin);       // ISSUE-07
+// app.route("/api/catalog", catalog); // ISSUE-08
+// app.route("/api/admin", admin);     // ISSUE-07
 
 // ── Asset catch-all ───────────────────────────────────────────────────────────
 

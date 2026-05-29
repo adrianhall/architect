@@ -163,6 +163,28 @@ A committed `wrangler.test.jsonc` provides the D1 binding configuration for test
 
 ---
 
+## ISSUE-06 — Diagram API: CRUD, duplicate, rename, concurrency + tests
+
+### User lookup by email on every request (no session caching)
+
+**Decision:** The diagrams routes resolve `user_id` from the authenticated email on every request by querying the `users` table. There is no JWT-claim-to-user-id mapping cached in the context. This is consistent with the `me.ts` pattern and correct because the auth middleware only provides `userEmail` — it does not provide the database `user_id`.
+
+**Alternative considered:** Storing `user_id` in the Hono context variables during the auth middleware. Deferred to keep this issue scoped; the auth middleware in ISSUE-04 was designed for `userEmail` only. A future refactor could cache the `user_id` in context to save one DB round-trip per request.
+
+### `PUT` endpoint re-fetches after update to return accurate response
+
+**Decision:** After the atomic `UPDATE … WHERE version = ?` succeeds, the handler re-fetches the updated row rather than constructing a response from the request inputs. This ensures the response reflects the actual DB state (e.g., if `updated_at` were set by a DB trigger in a future migration). The extra round-trip is negligible in D1.
+
+### `DiagramResponse` placed in `src/shared/src/diagram.ts`
+
+**Decision:** The issue spec mentions adding `DiagramResponse` to `src/shared/src/diagram.ts`. Since it references `GraphData` (also in that file) and is logically part of the diagram type domain, it was added there rather than in `api.ts`. It is re-exported via `src/shared/src/index.ts`.
+
+### Dynamic imports replaced with static imports for `users` schema table
+
+**Decision:** The initial draft of `diagrams.ts` used `const { users } = await import("../db/schema")` inside each handler to avoid a potential circular dependency. On review, there is no circular dependency — `diagrams.ts` → `../db/schema` is a clean one-way dependency. Replaced all dynamic imports with a single static `import { diagrams, users } from "../db/schema"` at the top of the file, which is consistent with the rest of the codebase and avoids unnecessary dynamic module loading in the Workers runtime.
+
+---
+
 ## ISSUE-04 — Auth middleware + structured logging + test helpers
 
 ### `test/helpers.ts` placed at `src/worker/src/test/helpers.ts`, not `src/worker/test/helpers.ts`

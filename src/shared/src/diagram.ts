@@ -103,6 +103,46 @@ export interface DiagramEdge {
 }
 
 /**
+ * API response shape for a single diagram resource.
+ *
+ * Returned by all diagram endpoints that return a diagram object. The
+ * `graph_data` field is a parsed JavaScript object (not a JSON string) when
+ * served over the API — deserialization happens in the worker route handler.
+ *
+ * @example
+ * ```ts
+ * const res: DiagramResponse = {
+ *   id: "01HQ7...",
+ *   user_id: "01HQ6...",
+ *   title: "My Architecture",
+ *   graph_data: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+ *   version: 1,
+ *   created_at: 1712000000000,
+ *   updated_at: 1712000000000,
+ * };
+ * ```
+ */
+export interface DiagramResponse {
+	/** Unique diagram ID (ULID). */
+	id: string;
+	/** ID of the owning user (ULID). */
+	user_id: string;
+	/** Diagram display title; 1–80 characters. */
+	title: string;
+	/** Parsed graph data including nodes, edges, and last-saved viewport. */
+	graph_data: GraphData;
+	/**
+	 * Optimistic concurrency version. Incremented by 1 on every full update
+	 * (`PUT`). Send back in `PUT` requests to detect concurrent edits.
+	 */
+	version: number;
+	/** Unix timestamp (ms) when the diagram was first created. */
+	created_at: number;
+	/** Unix timestamp (ms) when the diagram was last modified. */
+	updated_at: number;
+}
+
+/**
  * Complete graph data serialised to `diagrams.graph_data` in D1.
  *
  * This is the canonical in-memory and wire format for a diagram. Both the
