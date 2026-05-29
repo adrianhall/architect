@@ -1,0 +1,232 @@
+{
+	"categories": [
+		{ "id": "developer-platform", "label": "Developer Platform", "color": "#2563eb" },
+		{ "id": "zero-trust", "label": "Zero Trust", "color": "#16a34a" },
+		{ "id": "cdn-application", "label": "CDN / Application", "color": "#ea580c" },
+		{ "id": "other", "label": "Other", "color": "#6b7280" }
+	],
+	"services": [
+		{
+			"typeId": "workers",
+			"officialName": "Cloudflare Workers",
+			"shortName": "Workers",
+			"category": "developer-platform",
+			"iconPath": "workers.svg",
+			"docUrl": "https://developers.cloudflare.com/workers/"
+		},
+		{
+			"typeId": "pages",
+			"officialName": "Cloudflare Pages",
+			"shortName": "Pages",
+			"category": "developer-platform",
+			"iconPath": "pages.svg",
+			"docUrl": "https://developers.cloudflare.com/pages/"
+		},
+		{
+			"typeId": "d1",
+			"officialName": "Cloudflare D1",
+			"shortName": "D1",
+			"category": "developer-platform",
+			"iconPath": "d1.svg",
+			"docUrl": "https://developers.cloudflare.com/d1/"
+		},
+		{
+			"typeId": "kv",
+			"officialName": "Workers KV",
+			"shortName": "KV",
+			"category": "developer-platform",
+			"iconPath": "kv.svg",
+			"docUrl": "https://developers.cloudflare.com/kv/"
+		},
+		{
+			"typeId": "r2",
+			"officialName": "Cloudflare R2",
+			"shortName": "R2",
+			"category": "developer-platform",
+			"iconPath": "r2.svg",
+			"docUrl": "https://developers.cloudflare.com/r2/"
+		},
+		{
+			"typeId": "queues",
+			"officialName": "Cloudflare Queues",
+			"shortName": "Queues",
+			"category": "developer-platform",
+			"iconPath": "queues.svg",
+			"docUrl": "https://developers.cloudflare.com/queues/"
+		},
+		{
+			"typeId": "durable-objects",
+			"officialName": "Durable Objects",
+			"shortName": "Durable Objects",
+			"category": "developer-platform",
+			"iconPath": "durable-objects.svg",
+			"docUrl": "https://developers.cloudflare.com/durable-objects/"
+		},
+		{
+			"typeId": "workflows",
+			"officialName": "Cloudflare Workflows",
+			"shortName": "Workflows",
+			"category": "developer-platform",
+			"iconPath": "workflows.svg",
+			"docUrl": "https://developers.cloudflare.com/workflows/"
+		},
+		{
+			"typeId": "hyperdrive",
+			"officialName": "Hyperdrive",
+			"shortName": "Hyperdrive",
+			"category": "developer-platform",
+			"iconPath": "hyperdrive.svg",
+			"docUrl": "https://developers.cloudflare.com/hyperdrive/"
+		},
+		{
+			"typeId": "vectorize",
+			"officialName": "Vectorize",
+			"shortName": "Vectorize",
+			"category": "developer-platform",
+			"iconPath": "vectorize.svg",
+			"docUrl": "https://developers.cloudflare.com/vectorize/"
+		},
+		{
+			"typeId": "workers-ai",
+			"officialName": "Workers AI",
+			"shortName": "Workers AI",
+			"category": "developer-platform",
+			"iconPath": "workers-ai.svg",
+			"docUrl": "https://developers.cloudflare.com/workers-ai/"
+		},
+		{
+			"typeId": "browser-rendering",
+			"officialName": "Browser Rendering",
+			"shortName": "Browser Rendering",
+			"category": "developer-platform",
+			"iconPath": "browser-rendering.svg",
+			"docUrl": "https://developers.cloudflare.com/browser-rendering/"
+		},
+		{
+			"typeId": "email-workers",
+			"officialName": "Email Workers",
+			"shortName": "Email Workers",
+			"category": "developer-platform",
+			"iconPath": "email-routing.svg",
+			"docUrl": "https://developers.cloudflare.com/email-routing/email-workers/"
+		},
+		{
+			"typeId": "pipelines",
+			"officialName": "Pipelines",
+			"shortName": "Pipelines",
+			"category": "developer-platform",
+			"iconPath": "pipelines.svg",
+			"docUrl": "https://developers.cloudflare.com/pipelines/"
+		},
+		{
+			"typeId": "containers",
+			"officialName": "Containers",
+			"shortName": "Containers",
+			"category": "developer-platform",
+			"iconPath": "containers.svg",
+			"docUrl": "https://developers.cloudflare.com/containers/"
+		},
+		{
+			"typeId": "access",
+			"officialName": "Cloudflare Access",
+			"shortName": "Access",
+			"category": "zero-trust",
+			"iconPath": "access.svg",
+			"docUrl": "https://developers.cloudflare.com/cloudflare-one/policies/access/"
+		},
+		{
+			"typeId": "tunnel",
+			"officialName": "Cloudflare Tunnel",
+			"shortName": "Tunnel",
+			"category": "zero-trust",
+			"iconPath": "tunnel.svg",
+			"docUrl": "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/"
+		},
+		{
+			"typeId": "gateway",
+			"officialName": "Cloudflare Gateway",
+			"shortName": "Gateway",
+			"category": "zero-trust",
+			"iconPath": "gateway.svg",
+			"docUrl": "https://developers.cloudflare.com/cloudflare-one/policies/gateway/"
+		},
+		{
+			"typeId": "warp",
+			"officialName": "Cloudflare WARP",
+			"shortName": "WARP",
+			"category": "zero-trust",
+			"iconPath": "warp.svg",
+			"docUrl": "https://developers.cloudflare.com/cloudflare-one/connections/connect-devices/warp/"
+		},
+		{
+			"typeId": "cdn",
+			"officialName": "Cloudflare CDN",
+			"shortName": "CDN",
+			"category": "cdn-application",
+			"iconPath": "cdn.svg",
+			"docUrl": "https://developers.cloudflare.com/cache/"
+		},
+		{
+			"typeId": "dns",
+			"officialName": "Cloudflare DNS",
+			"shortName": "DNS",
+			"category": "cdn-application",
+			"iconPath": "dns.svg",
+			"docUrl": "https://developers.cloudflare.com/dns/"
+		},
+		{
+			"typeId": "load-balancing",
+			"officialName": "Load Balancing",
+			"shortName": "Load Balancing",
+			"category": "cdn-application",
+			"iconPath": "load-balancing.svg",
+			"docUrl": "https://developers.cloudflare.com/load-balancing/"
+		},
+		{
+			"typeId": "waf",
+			"officialName": "Web Application Firewall",
+			"shortName": "WAF",
+			"category": "cdn-application",
+			"iconPath": "waf.svg",
+			"docUrl": "https://developers.cloudflare.com/waf/"
+		},
+		{
+			"typeId": "ddos-protection",
+			"officialName": "DDoS Protection",
+			"shortName": "DDoS Protection",
+			"category": "cdn-application",
+			"iconPath": "ddos-protection.svg",
+			"docUrl": "https://developers.cloudflare.com/ddos-protection/"
+		},
+		{
+			"typeId": "argo-smart-routing",
+			"officialName": "Argo Smart Routing",
+			"shortName": "Argo",
+			"category": "cdn-application",
+			"iconPath": "argo-smart-routing.svg",
+			"docUrl": "https://developers.cloudflare.com/argo-smart-routing/"
+		},
+		{
+			"typeId": "stream",
+			"officialName": "Cloudflare Stream",
+			"shortName": "Stream",
+			"category": "cdn-application",
+			"iconPath": "stream.svg",
+			"docUrl": "https://developers.cloudflare.com/stream/"
+		},
+		{
+			"typeId": "images",
+			"officialName": "Cloudflare Images",
+			"shortName": "Images",
+			"category": "cdn-application",
+			"iconPath": "images.svg",
+			"docUrl": "https://developers.cloudflare.com/images/"
+		}
+	],
+	"edgeTypes": [
+		{ "id": "data-flow", "label": "Data Flow", "style": "solid" },
+		{ "id": "binding", "label": "Binding", "style": "dashed" },
+		{ "id": "trigger", "label": "Trigger", "style": "dotted" },
+		{ "id": "dependency", "label": "Dependency", "style": "animated" }
+	]
+}

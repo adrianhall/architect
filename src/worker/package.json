@@ -19,6 +19,7 @@
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.16.10",
 		"@cloudflare/workers-types": "^4.20260529.1",
+		"@types/node": "^22.19.19",
 		"drizzle-kit": "^0.31.10"
 	}
 }

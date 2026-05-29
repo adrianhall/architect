@@ -261,3 +261,31 @@ This is semantically equivalent, avoids the sub-router type complexity, and keep
 **Decision:** The ISSUE-04 spec included a test asserting that an expired dev JWT produces a 302 redirect. This tests behavior internal to the `@adrianhall/cloudflare-auth` library (specifically, what it does when HMAC validation fails and JWKS fallback returns an unsupported algorithm). The correct scope for auth middleware wiring tests is: public route is reachable, protected route requires auth, valid token sets user context.
 
 **Resolution:** The expired-token test was removed. The three remaining tests verify that the middleware is correctly wired (order, policy configuration, context variables) without depending on library internals.
+
+---
+
+## ISSUE-08 — Service catalog: data, shared types, API, icon serving + tests
+
+### `CatalogEdgeType` instead of `EdgeType` in catalog.ts
+
+**Decision:** The issue spec defines an `interface EdgeType` in `src/shared/src/catalog.ts` to represent a catalog edge-type object (with `id`, `label`, `style` fields). However, `src/shared/src/diagram.ts` already exports `type EdgeType = "data-flow" | "binding" | "trigger" | "dependency"` — a union type used as the discriminant for `DiagramEdge.type`. Both are re-exported via the barrel `src/shared/src/index.ts`, which would produce a duplicate-export error (`TS2308`).
+
+**Resolution:** Renamed the catalog interface to `CatalogEdgeType` to eliminate the collision. The `CatalogData.edgeTypes` field is therefore `CatalogEdgeType[]`. The `EdgeType` union in `diagram.ts` is unchanged. Tests, the catalog route, and the catalog data file all reference `CatalogEdgeType`.
+
+### `@types/node` added to shared and worker devDependencies
+
+**Decision:** The shared package's catalog test uses `createRequire` from `node:module` to load `catalog/services.json` at runtime (a clean alternative to a static JSON import that would violate TypeScript's `rootDir` constraint in a composite project). Without `@types/node`, TypeScript reports `TS2307: Cannot find module 'node:module'`. Additionally, the worker package has `nodejs_compat` enabled in wrangler, so Node.js-compatible built-in modules are available at runtime.
+
+**Resolution:** Added `"@types/node": "^22"` to `devDependencies` of both `src/shared/package.json` and `src/worker/package.json`. Added `"node"` to the worker tsconfig `types` array. npm hoists the package to the root `node_modules`, so both workspaces resolve it from the same install.
+
+### SVG icons sourced from cloudflare-docs, converted to `currentColor`
+
+**Decision:** The cloudflare-docs icons use three different colour conventions: (a) no explicit fill (paths default to black), (b) hardcoded Cloudflare orange (`#f6821f`), or (c) hardcoded black (`#000`). Icons served as static SVG files and referenced by `<img>` tags cannot be recoloured via CSS. Converting paths to `fill="currentColor"` allows the frontend to control icon colour via CSS `color` when inlining SVGs.
+
+**Resolution:** 22 icons with no explicit fill had `fill="currentColor"` added to the `<svg>` element. 4 icons with `fill="#f6821f"` (kv, durable-objects, vectorize, pipelines) had path fills replaced with `currentColor`. 1 icon with `fill="#000"` (argo-smart-routing) had its path fills replaced with `currentColor`. Clip-path `fill="#fff"` values in `<defs>` were intentionally left unchanged.
+
+### Catalog JSON read via `createRequire` in shared tests
+
+**Decision:** A static `import catalogData from "../../../../catalog/services.json"` in `src/shared/src/__tests__/catalog.test.ts` would resolve a file outside the TypeScript `rootDir` (`src/shared/src/`). With `composite: true` and `isolatedModules: true`, TypeScript may emit `TS6059` for source files outside `rootDir`. Using `createRequire(import.meta.url)` instead loads the JSON at runtime through Node's CommonJS require, which TypeScript does not attempt to emit, sidestepping the constraint entirely.
+
+**Resolution:** The shared catalog test imports the JSON with `const require = createRequire(import.meta.url); const catalogData: CatalogData = require("../../../../catalog/services.json")`. A `CatalogData` type annotation provides full type safety without a static import path.
