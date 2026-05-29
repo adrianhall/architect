@@ -89,6 +89,25 @@ script options first**.
 
 ---
 
+## Testing conventions
+
+- **Test our code, not library code.** Only write tests that exercise logic
+  written in this repository. Do not write tests that verify the behaviour of a
+  third-party package — those packages have their own test suites.
+
+  A concrete example of the anti-pattern to avoid: testing that an expired JWT
+  causes a redirect exercises the `@adrianhall/cloudflare-auth` library
+  internals, not anything we wrote. Correct tests for auth middleware verify
+  *wiring*: that the public route is reachable, that the protected route
+  requires auth, and that a valid token makes user context available to
+  handlers.
+
+  Ask "if I deleted this library and replaced it with a different one, would
+  this test still be meaningful?" If the answer is no, the test is testing the
+  library, not the integration.
+
+---
+
 ## Repository conventions
 
 - **Branch per issue:** work on `issues/NN`; never commit directly to `main`.
