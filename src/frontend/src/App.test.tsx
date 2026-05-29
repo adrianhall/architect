@@ -1,17 +1,36 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
+/** Shared mock user returned by most App-level tests. */
+const mockUser = {
+	id: "01ABC",
+	email: "alice@example.com",
+	name: "alice",
+	avatar_url: null,
+	role: "user",
+	created_at: 1000,
+	updated_at: 1000,
+};
+
 /**
- * Smoke tests for the root App component.
+ * Integration tests for the root App component.
  *
- * Verifies that the React app renders the CF-Architect heading so that any
- * break in the component tree (missing imports, JSX transform issues, Tailwind
- * plugin errors) surfaces immediately in CI.
+ * Verifies that routing, auth context, and the app shell work together
+ * end-to-end with a mocked `/api/me` endpoint.
  */
 describe("App", () => {
-	it("renders the CF-Architect heading", () => {
+	beforeEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("renders the dashboard when authenticated", async () => {
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: mockUser }), { status: 200 }));
+
 		render(<App />);
-		expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("CF-Architect");
+
+		await waitFor(() => {
+			expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+		});
 	});
 });

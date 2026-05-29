@@ -264,6 +264,30 @@ This is semantically equivalent, avoids the sub-router type complexity, and keep
 
 ---
 
+## ISSUE-10 — Routing, app shell layout, auth context + tests
+
+### `useAuth.ts` renamed to `useAuth.tsx`
+
+**Decision:** The issue spec lists `src/frontend/src/hooks/useAuth.ts`, but the file contains JSX (`<AuthContext.Provider>`). TypeScript and Biome require the `.tsx` extension for files containing JSX syntax. Created as `useAuth.tsx` instead.
+
+### `useCallback` wraps `fetchUser` to satisfy `useExhaustiveDependencies`
+
+**Decision:** The issue spec shows `useEffect(() => { fetchUser(); }, [])` with an empty dependency array. Biome's `useExhaustiveDependencies` lint rule (equivalent to the ESLint `react-hooks/exhaustive-deps` rule) flags `fetchUser` as a missing dependency. Rather than disabling the rule, `fetchUser` is wrapped in `useCallback(async () => { ... }, [])` — since it only depends on `setState` (which is stable across renders), the callback reference itself is stable and can safely be added to the `useEffect` dependency array. This is the idiomatic React pattern and avoids a lint suppression comment.
+
+### Local `ApiUser` interface (snake_case) instead of shared `User` type
+
+**Decision:** The shared `User` type in `@architect/shared` uses camelCase properties (`avatarUrl`, `createdAt`, `updatedAt`), but the `/api/me` endpoint returns snake_case (`avatar_url`, `created_at`, `updated_at`) because the route handler explicitly maps Drizzle camelCase back to snake_case wire format. Defining a local `ApiUser` interface (snake_case) avoids a type mismatch and is consistent with what all consuming components actually receive. ISSUE-11's typed API client will add the camelCase mapping layer.
+
+### `afterEach(cleanup)` added to `src/frontend/src/test/setup.ts`
+
+**Decision:** Vitest is configured without `globals: true`, so `afterEach` is not in the global scope. `@testing-library/react` registers its automatic cleanup hook by detecting `afterEach` globally. Without it, React trees mounted in one test leak into the next, causing failures when multiple tests render the same component (e.g., `getByRole("img")` finding images from prior tests). Added an explicit `afterEach(cleanup)` import to `setup.ts` to guarantee DOM cleanup after every test.
+
+### Additional page tests created in `src/frontend/src/pages/__tests__/`
+
+**Decision:** The issue spec only specifies test files for `useAuth`, `ProtectedRoute`, `AppShell`, and `App`. However, `Admin.tsx` and `Editor.tsx` had 0% coverage. Added `Admin.test.tsx` and `Editor.test.tsx` in `src/frontend/src/pages/__tests__/` to satisfy the >90% coverage requirement. Similarly, `AdminRoute.test.tsx` was added under `src/frontend/src/components/layout/__tests__/` to cover the admin/non-admin branches.
+
+---
+
 ## ISSUE-09 — Frontend scaffolding: Vite, React, Tailwind, shadcn
 
 ### React 19 used instead of the spec's React 18 pin
