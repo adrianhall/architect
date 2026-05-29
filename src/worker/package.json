@@ -4,6 +4,8 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"db:migrate:local": "echo 'No migrations yet'",
+		"db:migrate:remote": "echo 'No migrations yet'",
 		"test": "vitest run"
 	},
 	"dependencies": {

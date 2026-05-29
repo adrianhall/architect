@@ -40,3 +40,37 @@ Since `vcs.useIgnoreFile: true` already excludes `.gitignore` entries (`node_mod
 ### Extend placeholder tests to invoke actual code paths
 
 **Decision:** The original placeholder tests only checked that exports existed (`expect(fn).toBeInstanceOf(Function)`), leaving the function bodies uncovered. Added one additional test per file that calls the fetch handler / renders the App component, achieving 100% coverage on both new source files.
+
+---
+
+## ISSUE-02 — Terraform infrastructure + deployment pipeline
+
+### `cloudflare_worker` v5 attribute corrections
+
+**Decision:** The issue spec specified `cloudflare_worker` with `script_name`, `main_module`, `compatibility_date`, and `content` attributes. Per the Cloudflare v5 Terraform provider docs and the IaC guide, `cloudflare_worker` uses `name` (not `script_name`) and does not accept `main_module`, `compatibility_date`, or `content`. Those attributes belong to `cloudflare_workers_script` or `cloudflare_worker_version`.
+
+**Resolution:** Used `cloudflare_worker` with only `account_id` and `name`. Terraform registers the worker name; Wrangler deploys the actual code. `outputs.tf` references `cloudflare_worker.app.name` (not `.script_name`). This matches the cloudflare-scripts skill's canonical pattern.
+
+### dotenv provider attribute is `.env`, not `.entries`
+
+**Decision:** The issue spec used `data.dotenv.env.entries.VARIABLE` to access `.env` file values. Per the jrhouston/dotenv provider source code (confirmed from `data_source_dotenv.go`), the exported attribute is `env` (a TypeMap), not `entries`. Accessing individual values requires `data.dotenv.env.env.VARIABLE_NAME`.
+
+**Resolution:** Used `data.dotenv.env.env.VARIABLE` throughout `infra/main.tf`. The issue spec attribute name would cause `terraform validate` to fail with an "unsupported argument" error.
+
+### `precheck:types` decoupled from `generate:types`
+
+**Decision:** ISSUE-01 set `precheck:types: "npm run generate:types"` to ensure TypeScript declaration files exist before type checking. In ISSUE-02, `generate:types` changes meaning from `tsc -b` to `generate-types -d src/worker -- ...` (which generates `worker-configuration.d.ts` from `wrangler.jsonc`). Running this as a pre-step for `check:types` would fail on a clean checkout without provisioned infrastructure.
+
+**Resolution:** Changed `precheck:types` to `tsc -b` directly, preserving the ISSUE-01 behavior of building workspace declaration files before type checking, without requiring a provisioned `wrangler.jsonc`.
+
+### `npm run build` requires provisioned infrastructure
+
+**Decision:** The new `build` script (`run-s generate:types build:frontend`) invokes `generate-types` which requires `wrangler.jsonc` to exist. On a clean checkout without `npm run provision`, `npm run build` exits with code 1. This is expected and documented behavior — the generate-types tool explicitly instructs: "Run `npm run provision` to provision infrastructure and generate it."
+
+**Resolution:** This is by design. The deployment workflow documented in `MVP_PLAN.md` requires provisioning before building. No change was made; the behavior matches the workflow intent.
+
+### `@adrianhall/cloudflare-scripts` installed from GitHub `main`
+
+**Decision:** The cloudflare-scripts skill referenced tag `v1.0.2` which did not exist on the GitHub repo at implementation time (only `v1.0.1` and `1.0.0` were released tags). The `main` branch contains version `1.0.2` code.
+
+**Resolution:** Installed from `github:adrianhall/cloudflare-scripts` (main branch). The `package.json` devDependency is pinned to the GitHub source. Once a `v1.0.2` tag is released, the reference should be updated to `github:adrianhall/cloudflare-scripts#v1.0.2`.

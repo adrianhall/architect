@@ -4,6 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"build": "echo 'Frontend build not yet configured'",
 		"test": "vitest run"
 	},
 	"dependencies": {
