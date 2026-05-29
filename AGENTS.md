@@ -34,6 +34,8 @@ Run them from the **repo root** unless the table says otherwise.
 > to verify correctness before committing. Run `npm test` whenever worker or
 > frontend source files are modified.
 
+You are also allowed to use `npm info`, `npm version`, `npm view` and `npm docs` to get more information about npm packages.
+
 ---
 
 ## Research methodology
@@ -51,21 +53,22 @@ authoritative references for this project.
 
 | Tool | URL |
 |------|-----|
-| TypeScript (handbook & tsconfig reference) | https://www.typescriptlang.org/docs/ |
-| TypeScript project references | https://www.typescriptlang.org/docs/handbook/project-references.html |
-| Biome getting started | https://biomejs.dev/guides/getting-started/ |
-| Biome configuration reference | https://biomejs.dev/reference/configuration/ |
-| Biome upgrade to v2 | https://biomejs.dev/guides/upgrade-to-biome-v2/ |
-| Vitest guide | https://vitest.dev/guide/ |
-| Vitest configuration reference | https://vitest.dev/config/ |
-| Vitest coverage | https://vitest.dev/guide/coverage |
-| Vite configuration | https://vite.dev/config/ |
+| TypeScript (handbook & tsconfig reference) | <https://www.typescriptlang.org/docs/> |
+| TypeScript project references | <https://www.typescriptlang.org/docs/handbook/project-references.html> |
+| Biome getting started | <https://biomejs.dev/guides/getting-started/> |
+| Biome configuration reference | <https://biomejs.dev/reference/configuration/> |
+| Biome upgrade to v2 | <https://biomejs.dev/guides/upgrade-to-biome-v2/> |
+| Vitest guide | <https://vitest.dev/guide/> |
+| Vitest configuration reference | <https://vitest.dev/config/> |
+| Vitest coverage | <https://vitest.dev/guide/coverage> |
+| Vitest projects | <https://vitest.dev/guide/projects.html> |
+| Vite configuration | <https://vite.dev/config/> |
 | Cloudflare Workers (wrangler, bindings, etc.) | Available via the **Cloudflare Docs MCP** tool |
-| Terraform language & CLI | https://developer.hashicorp.com/terraform/docs |
-| Cloudflare Terraform provider v5 | https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs |
-| jrhouston/dotenv Terraform provider | https://registry.terraform.io/providers/jrhouston/dotenv/latest/docs |
-| npm workspaces | https://docs.npmjs.com/cli/using-npm/workspaces |
-| React | https://react.dev/reference/react |
+| Terraform language & CLI | <https://developer.hashicorp.com/terraform/docs> |
+| Cloudflare Terraform provider v5 | h<ttps://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs> |
+| jrhouston/dotenv Terraform provider | <https://registry.terraform.io/providers/jrhouston/dotenv/latest/docs> |
+| npm workspaces | <https://docs.npmjs.com/cli/using-npm/workspaces> |
+| React | <https://react.dev/reference/react> |
 
 ---
 
