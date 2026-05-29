@@ -14,7 +14,8 @@
     {
       "binding": "DB",
       "database_name": "{{d1_database_name}}",
-      "database_id": "{{d1_database_id}}"
+      "database_id": "{{d1_database_id}}",
+      "migrations_dir": "src/db/migrations"
     }
   ],
   "vars": {

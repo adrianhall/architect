@@ -89,3 +89,52 @@ Since `vcs.useIgnoreFile: true` already excludes `.gitignore` entries (`node_mod
 **New `.env` variables consumed:** `CLOUDFLARE_IDP_ID` (IdP UUID) and `CLOUDFLARE_WORKERS_DOMAIN` (e.g., `abc123.workers.dev`) — both added to `locals` in `main.tf`. Both were already documented in the updated `.env.example`.
 
 **Verified:** `npm run provision` created all 4 resources (worker, D1 database, Access policy, Access application) successfully. `terraform plan` on a second run shows "No changes" — fully idempotent.
+
+---
+
+## ISSUE-03 — D1 schema + Drizzle ORM + migrations + shared types
+
+### Use binding name `DB` for `d1 migrations apply`, not the database name
+
+**Decision:** The issue spec used the hardcoded database name `cf-architect-db` in the `db:migrate:local` and `db:migrate:remote` scripts. Per the [Wrangler D1 docs](https://developers.cloudflare.com/d1/wrangler-commands/#d1-migrations-apply), the `[DATABASE]` positional argument accepts either "the name or binding of the DB". The database name is derived from `TF_VAR_worker_name` (e.g. `${worker_name}-db`) and changes whenever the worker is renamed, making a hardcoded name fragile.
+
+**Resolution:** Changed both scripts to use the binding name `DB`, which is the constant name declared in `wrangler.jsonc.tpl` and never changes regardless of infrastructure naming:
+
+```json
+"db:migrate:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
+"db:migrate:remote": "wrangler d1 migrations apply DB --remote --config wrangler.jsonc"
+```
+
+### `getDb` function body now tested via `@cloudflare/vitest-pool-workers`
+
+**Decision (supersedes the `v8 ignore` workaround):** The `v8 ignore` annotation on `getDb` was removed. The worker project now uses `@cloudflare/vitest-pool-workers` (Miniflare), which provides a real in-memory `D1Database` binding. `getDb(env.DB)` is called in `src/worker/src/db/index.test.ts` and exercises the full function path.
+
+### `@cloudflare/vitest-pool-workers` for Worker tests; Vitest upgraded to 4.1.7
+
+**Decision:** Worker tests that need D1 bindings (DB helper, migration verification) cannot run in the standard Node environment — a real `D1Database` is required. `@cloudflare/vitest-pool-workers` runs every test file in the Miniflare Workers runtime with a full in-memory D1 instance.
+
+This required upgrading `vitest` and `@vitest/coverage-v8` from `3.2.1` to `4.1.7` (the minimum version required by `@cloudflare/vitest-pool-workers@0.16.10`).
+
+A committed `wrangler.test.jsonc` provides the D1 binding configuration for tests. Miniflare ignores the placeholder `database_id` and provisions an in-memory SQLite database.
+
+### `@cloudflare/vitest-pool-workers/config` sub-path does not exist in v0.16.10
+
+**Decision:** The Cloudflare documentation shows `import { readD1Migrations } from "@cloudflare/vitest-pool-workers/config"`. In `@cloudflare/vitest-pool-workers@0.16.10`, the `./config` sub-path export does not exist. Both `cloudflareTest` and `readD1Migrations` are exported from the main entry point (`@cloudflare/vitest-pool-workers`).
+
+**Resolution:** Import both from the main package.
+
+### `test:coverage` excludes the worker project (v8 coverage incompatible with Workers runtime)
+
+**Decision:** `@vitest/coverage-v8` imports `node:inspector/promises` to instrument code. The Workers runtime (Miniflare) does not provide `node:inspector`, so coverage collection for worker tests fails with "No such module node:inspector/promises". This is [documented by Cloudflare](https://developers.cloudflare.com/workers/testing/vitest-integration/known-issues/#module-resolution).
+
+**Resolution:** Changed `test:coverage` to run only `--project frontend --project shared`. Worker code correctness is verified through the 22 integration tests that run against Miniflare D1 via `npm test` or `npm run test:worker`.
+
+### Shared type tests moved to their own Vitest project
+
+**Decision:** Shared type tests were previously run inside the worker project (`include: ["../shared/src/**/*.test.ts"]`). Moving to `cloudflareTest()` for the worker project would unnecessarily run pure TypeScript type tests inside Miniflare. The shared package now has its own `vitest.config.ts` (standard Node environment) and is listed as a separate project in the root config.
+
+### `Cloudflare.Env` augmented in `env.d.ts` instead of `extends Env`
+
+**Decision:** The docs suggest `interface ProvidedEnv extends Env {}` to make production bindings available on `env` in tests. But `Env` comes from `worker-configuration.d.ts`, which is generated and lives outside the TypeScript `include` directory (`src/worker/src/`). On a clean checkout without provisioning, TypeScript silently treats `Env` as `{}`, making `env.DB` resolve to `any` and cascading implicit-any errors throughout all test files.
+
+**Resolution:** Augment `Cloudflare.Env` directly in `src/worker/src/test/env.d.ts` (which IS inside `include`). When `worker-configuration.d.ts` IS present, TypeScript merges both declarations — identical property types, no conflict. This approach works on clean checkouts and after provisioning.

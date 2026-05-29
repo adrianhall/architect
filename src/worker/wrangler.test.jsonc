@@ -1,0 +1,28 @@
+{
+	// Test-only wrangler configuration for @cloudflare/vitest-pool-workers / Miniflare.
+	//
+	// This file is committed to version control and used exclusively by the
+	// Vitest test runner.  It does NOT need a real account_id or a real
+	// database_id — Miniflare uses in-memory SQLite for D1 bindings.
+	//
+	// The CLOUDFLARE_TEAM_DOMAIN and SEED_ADMIN_EMAIL vars are set to safe
+	// placeholder values; auth middleware tests will override them via the
+	// `miniflare.bindings` option in the vitest config when that is needed.
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "architect-test",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-05-26",
+	"vars": {
+		"CLOUDFLARE_TEAM_DOMAIN": "test.cloudflareaccess.com",
+		"SEED_ADMIN_EMAIL": "test@example.com"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "architect-test-db",
+			// Miniflare ignores this ID and uses in-memory SQLite instead.
+			"database_id": "00000000-0000-0000-0000-000000000000",
+			"migrations_dir": "src/db/migrations"
+		}
+	]
+}
