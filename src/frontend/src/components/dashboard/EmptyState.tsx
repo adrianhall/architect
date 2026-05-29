@@ -54,7 +54,7 @@ export function EmptyState({ icon, title, description, actionLabel, onAction, cl
 		<div className={cn("flex flex-col items-center justify-center py-16 text-center", className)}>
 			{icon !== undefined && <div className="mb-4 text-muted-foreground">{icon}</div>}
 			<h2 className="text-xl font-semibold">{title}</h2>
-			{description !== undefined && <p className="mt-2 max-w-md text-muted-foreground">{description}</p>}
+			{description !== undefined && <p className="mt-2 w-full max-w-md text-muted-foreground">{description}</p>}
 			{actionLabel !== undefined && onAction !== undefined && (
 				<Button onClick={onAction} className="mt-6">
 					{actionLabel}

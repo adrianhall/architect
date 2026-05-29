@@ -92,8 +92,6 @@ export function Dashboard() {
 					}
 					title="Create your first diagram"
 					description="Start designing your Cloudflare architecture. Create a blank diagram or explore blueprints for inspiration."
-					actionLabel="New Diagram"
-					onAction={() => void handleCreate()}
 				/>
 			)}
 

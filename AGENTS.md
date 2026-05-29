@@ -127,6 +127,26 @@ script options first**.
   this test still be meaningful?" If the answer is no, the test is testing the
   library, not the integration.
 
+- **Coverage gaps: triage before writing tests.** When coverage falls below the
+  90% threshold, analyse the uncovered lines and sort them into three buckets
+  before writing a single new test:
+
+  | Bucket | Description | Action |
+  |--------|-------------|--------|
+  | **Simple** | Trivially uncovered: a branch that is one boolean flip away from being hit, or a helper function that just needs one more call-site test | **Write the test** |
+  | **Standard flow** | Normal user-visible behaviour that is simply untested yet: the happy path for a feature, a mutation that fires after a timer, a navigation that happens after a success response | **Write the test** |
+  | **Defensive programming** | Guards against impossible or library-internal states: `relatedTarget` checks for browser quirks, `clearTimeout` on a ref that is always `undefined` on first call, `null`-coalescing a value that TypeScript already guarantees is non-null, error branches that only fire if a third-party library misbehaves | **Skip — do not write a test** |
+
+  Defensive programming misses are hard to trigger artificially, low value (they
+  protect against conditions that never occur in practice), and often require
+  complex test scaffolding (fake timers, DOM event injection, library internals)
+  that makes tests brittle and expensive to maintain. Accept the small coverage
+  gap rather than contorting tests to reach them.
+
+  If the overall file coverage is still below 90% after covering all Simple and
+  Standard Flow gaps, re-evaluate whether the remaining misses are truly
+  defensive, or whether a meaningful integration scenario was overlooked.
+
 ---
 
 ## Repository conventions

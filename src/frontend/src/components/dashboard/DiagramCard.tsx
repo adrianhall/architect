@@ -132,14 +132,23 @@ export function DiagramCard({ id, title, updatedAt }: DiagramCardProps) {
 	);
 
 	/**
-	 * Navigate to the editor unless the click originated from the dropdown or
-	 * inline input. Also checks `willRenameRef` because React batches state
-	 * updates: `isRenaming` might still be `false` when the card's click handler
-	 * fires even though `setIsRenaming(true)` was called in the `onSelect` of the
-	 * Rename menu item (which fires on `pointerup`, before `click`).
+	 * Navigate to the editor unless the click originated from the dropdown,
+	 * inline rename input, or the delete confirmation dialog.
+	 *
+	 * React portals participate in the synthetic-event bubble chain. The
+	 * `AlertDialog` renders into `document.body` (a DOM portal) but is still a
+	 * React descendant of this Card. Without the `showDeleteDialog` guard, every
+	 * button click inside the dialog would bubble up here and trigger navigation.
+	 * React 18 batches state updates, so `showDeleteDialog` is still `true` when
+	 * this handler reads it even after `setShowDeleteDialog(false)` has been
+	 * queued by `handleDelete` in the same event batch.
+	 *
+	 * Also checks `willRenameRef` because `setIsRenaming(true)` is called in
+	 * `onSelect` (fires on `pointerup`) but React may not have flushed it before
+	 * the subsequent `click` event reaches this handler.
 	 */
 	const handleCardClick = (e: React.MouseEvent) => {
-		if (isRenaming || willRenameRef.current) return;
+		if (isRenaming || willRenameRef.current || showDeleteDialog) return;
 		const target = e.target as HTMLElement;
 		if (target.closest("[data-dropdown-trigger]")) return;
 		navigate(`/editor/${id}`);
