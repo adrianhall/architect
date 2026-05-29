@@ -259,14 +259,11 @@ check "Search by email substring returns 1 result"    "$(field '.data.users | le
 check "Search result email matches"                   "$(field '.data.users[0].email')"     "$TARGET_EMAIL"
 check "Search pagination.total is 1"                  "$(field '.data.pagination.total')"   "1"
 
-# Sort by email ascending — verify first ≤ last using string comparison.
+# Sort by email ascending — use jq to verify the full list equals its sorted form.
 as_admin GET "/api/admin/users?sort=email&order=asc&limit=100"
 check "sort=email&order=asc returns 200"              "$LAST_STATUS"  "200"
-FIRST_EMAIL="$(field '.data.users[0].email')"
-LAST_IDX="$(( $(field '.data.users | length') - 1 ))"
-LAST_EMAIL="$(field ".data.users[${LAST_IDX}].email")"
-check "First email ≤ last email (ascending order)" \
-  "$([[ "$FIRST_EMAIL" <= "$LAST_EMAIL" ]] && echo "1" || echo "0")" "1"
+check "Emails are in ascending lexicographic order" \
+  "$(field '[.data.users[].email] | . == sort')"  "true"
 
 # Pagination with page=1&limit=2.
 as_admin GET "/api/admin/users?page=1&limit=2"
