@@ -29,13 +29,17 @@
 	--color-category-other: #ea580c;
 	--color-category-external: #6b7280;
 
-	/* Spacing scale */
-	--spacing-xs: 0.25rem;
-	--spacing-sm: 0.5rem;
-	--spacing-md: 1rem;
-	--spacing-lg: 1.5rem;
-	--spacing-xl: 2rem;
-	--spacing-2xl: 3rem;
+	/*
+	 * Spacing scale — Tailwind v4 uses a single --spacing base multiplier.
+	 * Numeric utilities (p-4, gap-6, m-8) compute as: var(--spacing) * N.
+	 * The default --spacing of 0.25rem means p-4 = 1rem, gap-6 = 1.5rem, etc.
+	 *
+	 * IMPORTANT: Do NOT define --spacing-sm, --spacing-md, --spacing-lg, etc.
+	 * In Tailwind v4, max-w-{name} resolves to var(--container-{name}) with a
+	 * fallback to var(--spacing-{name}). Custom --spacing-lg: 1.5rem would
+	 * shadow the default --container-lg: 32rem, making max-w-lg = 1.5rem
+	 * instead of the expected 32rem.
+	 */
 
 	/* Border radius */
 	--radius-sm: 0.25rem;
