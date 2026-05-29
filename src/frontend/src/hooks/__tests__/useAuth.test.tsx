@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createQueryWrapper } from "../../test/query-wrapper";
 import { AuthProvider, useAuth } from "../useAuth";
 
 /**
@@ -23,10 +24,13 @@ describe("useAuth", () => {
 		// Mock a fetch that never resolves so the loading state persists.
 		vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => {}));
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<AuthProvider>
-				<AuthDisplay />
-			</AuthProvider>,
+			<Wrapper>
+				<AuthProvider>
+					<AuthDisplay />
+				</AuthProvider>
+			</Wrapper>,
 		);
 
 		expect(screen.getByText("Loading...")).toBeInTheDocument();
@@ -50,10 +54,13 @@ describe("useAuth", () => {
 			),
 		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<AuthProvider>
-				<AuthDisplay />
-			</AuthProvider>,
+			<Wrapper>
+				<AuthProvider>
+					<AuthDisplay />
+				</AuthProvider>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
@@ -62,12 +69,17 @@ describe("useAuth", () => {
 	});
 
 	it("sets error to 'unauthorized' on 401 response", async () => {
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Not authenticated" } }), { status: 401 }),
+		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<AuthProvider>
-				<AuthDisplay />
-			</AuthProvider>,
+			<Wrapper>
+				<AuthProvider>
+					<AuthDisplay />
+				</AuthProvider>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
@@ -78,10 +90,13 @@ describe("useAuth", () => {
 	it("sets error message on network failure", async () => {
 		vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network error"));
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<AuthProvider>
-				<AuthDisplay />
-			</AuthProvider>,
+			<Wrapper>
+				<AuthProvider>
+					<AuthDisplay />
+				</AuthProvider>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
@@ -90,32 +105,23 @@ describe("useAuth", () => {
 	});
 
 	it("sets error message on non-401 server error response", async () => {
-		// Covers the branch where res.ok is false but status is not 401/302.
-		vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 500 }));
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "Internal server error" } }), {
+				status: 500,
+			}),
+		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<AuthProvider>
-				<AuthDisplay />
-			</AuthProvider>,
+			<Wrapper>
+				<AuthProvider>
+					<AuthDisplay />
+				</AuthProvider>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
-			expect(screen.getByText("Error: Failed to fetch user: 500")).toBeInTheDocument();
-		});
-	});
-
-	it("sets generic error message when a non-Error value is thrown", async () => {
-		// Covers the `err instanceof Error ? ... : "Unknown error"` else branch.
-		vi.spyOn(globalThis, "fetch").mockRejectedValue("string rejection");
-
-		render(
-			<AuthProvider>
-				<AuthDisplay />
-			</AuthProvider>,
-		);
-
-		await waitFor(() => {
-			expect(screen.getByText("Error: Unknown error")).toBeInTheDocument();
+			expect(screen.getByText("Error: Internal server error")).toBeInTheDocument();
 		});
 	});
 

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/hooks/useAuth";
+import { createQueryWrapper } from "@/test/query-wrapper";
 import { AppShell } from "../AppShell";
 
 describe("AppShell", () => {
@@ -27,16 +28,19 @@ describe("AppShell", () => {
 			),
 		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<MemoryRouter initialEntries={["/"]}>
-				<AuthProvider>
-					<Routes>
-						<Route element={<AppShell />}>
-							<Route path="/" element={<div>Child content</div>} />
-						</Route>
-					</Routes>
-				</AuthProvider>
-			</MemoryRouter>,
+			<Wrapper>
+				<MemoryRouter initialEntries={["/"]}>
+					<AuthProvider>
+						<Routes>
+							<Route element={<AppShell />}>
+								<Route path="/" element={<div>Child content</div>} />
+							</Route>
+						</Routes>
+					</AuthProvider>
+				</MemoryRouter>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
@@ -64,16 +68,19 @@ describe("AppShell", () => {
 			),
 		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<MemoryRouter initialEntries={["/"]}>
-				<AuthProvider>
-					<Routes>
-						<Route element={<AppShell />}>
-							<Route path="/" element={<div>Content</div>} />
-						</Route>
-					</Routes>
-				</AuthProvider>
-			</MemoryRouter>,
+			<Wrapper>
+				<MemoryRouter initialEntries={["/"]}>
+					<AuthProvider>
+						<Routes>
+							<Route element={<AppShell />}>
+								<Route path="/" element={<div>Content</div>} />
+							</Route>
+						</Routes>
+					</AuthProvider>
+				</MemoryRouter>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
@@ -101,16 +108,19 @@ describe("AppShell", () => {
 			),
 		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<MemoryRouter initialEntries={["/"]}>
-				<AuthProvider>
-					<Routes>
-						<Route element={<AppShell />}>
-							<Route path="/" element={<div>Content</div>} />
-						</Route>
-					</Routes>
-				</AuthProvider>
-			</MemoryRouter>,
+			<Wrapper>
+				<MemoryRouter initialEntries={["/"]}>
+					<AuthProvider>
+						<Routes>
+							<Route element={<AppShell />}>
+								<Route path="/" element={<div>Content</div>} />
+							</Route>
+						</Routes>
+					</AuthProvider>
+				</MemoryRouter>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
@@ -137,16 +147,19 @@ describe("AppShell", () => {
 			),
 		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<MemoryRouter initialEntries={["/"]}>
-				<AuthProvider>
-					<Routes>
-						<Route element={<AppShell />}>
-							<Route path="/" element={<div>Content</div>} />
-						</Route>
-					</Routes>
-				</AuthProvider>
-			</MemoryRouter>,
+			<Wrapper>
+				<MemoryRouter initialEntries={["/"]}>
+					<AuthProvider>
+						<Routes>
+							<Route element={<AppShell />}>
+								<Route path="/" element={<div>Content</div>} />
+							</Route>
+						</Routes>
+					</AuthProvider>
+				</MemoryRouter>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {
@@ -175,16 +188,19 @@ describe("AppShell", () => {
 			),
 		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<MemoryRouter initialEntries={["/"]}>
-				<AuthProvider>
-					<Routes>
-						<Route element={<AppShell />}>
-							<Route path="/" element={<div>Content</div>} />
-						</Route>
-					</Routes>
-				</AuthProvider>
-			</MemoryRouter>,
+			<Wrapper>
+				<MemoryRouter initialEntries={["/"]}>
+					<AuthProvider>
+						<Routes>
+							<Route element={<AppShell />}>
+								<Route path="/" element={<div>Content</div>} />
+							</Route>
+						</Routes>
+					</AuthProvider>
+				</MemoryRouter>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {

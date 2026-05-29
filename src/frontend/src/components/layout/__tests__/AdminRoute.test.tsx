@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/hooks/useAuth";
+import { createQueryWrapper } from "@/test/query-wrapper";
 import { AdminRoute } from "../AdminRoute";
 
 /** Helper that sets up the AuthProvider with a mocked /api/me response. */
@@ -19,14 +20,17 @@ function renderWithAuth(userOverrides: Record<string, unknown> = {}) {
 
 	vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ data: defaultUser }), { status: 200 }));
 
+	const { Wrapper } = createQueryWrapper();
 	return render(
-		<MemoryRouter>
-			<AuthProvider>
-				<AdminRoute>
-					<div>Admin content</div>
-				</AdminRoute>
-			</AuthProvider>
-		</MemoryRouter>,
+		<Wrapper>
+			<MemoryRouter>
+				<AuthProvider>
+					<AdminRoute>
+						<div>Admin content</div>
+					</AdminRoute>
+				</AuthProvider>
+			</MemoryRouter>
+		</Wrapper>,
 	);
 }
 

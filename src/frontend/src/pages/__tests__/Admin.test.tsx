@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "@/hooks/useAuth";
+import { createQueryWrapper } from "@/test/query-wrapper";
 import { Admin } from "../Admin";
 
 describe("Admin", () => {
@@ -27,12 +28,15 @@ describe("Admin", () => {
 			),
 		);
 
+		const { Wrapper } = createQueryWrapper();
 		render(
-			<MemoryRouter>
-				<AuthProvider>
-					<Admin />
-				</AuthProvider>
-			</MemoryRouter>,
+			<Wrapper>
+				<MemoryRouter>
+					<AuthProvider>
+						<Admin />
+					</AuthProvider>
+				</MemoryRouter>
+			</Wrapper>,
 		);
 
 		await waitFor(() => {

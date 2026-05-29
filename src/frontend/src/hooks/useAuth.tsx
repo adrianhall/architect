@@ -1,32 +1,13 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, type ReactNode, useContext } from "react";
+import type { ApiError } from "@/api/client";
+import type { ApiUser } from "@/api/hooks/useMe";
+import { useMe } from "@/api/hooks/useMe";
 
 /**
- * User profile as returned directly by the `/api/me` endpoint.
- *
- * This type uses snake_case property names to match the API wire format.
- * The backend Drizzle schema stores columns as snake_case SQL names and the
- * route handler explicitly maps them back to snake_case before returning.
- *
- * Note: The shared `User` type from `@architect/shared` uses camelCase
- * (`avatarUrl`, `createdAt`, `updatedAt`). ISSUE-11 will introduce a typed API
- * client that performs the mapping. For now, components consume this type.
+ * Re-export `ApiUser` so components that previously imported it from this
+ * module continue to work without path changes.
  */
-export interface ApiUser {
-	/** ULID primary key. */
-	id: string;
-	/** Email address from the Cloudflare Access JWT `email` claim. */
-	email: string;
-	/** Display name sourced from the IdP; `null` when not provided. */
-	name: string | null;
-	/** Avatar URL sourced from the IdP; `null` when not provided. */
-	avatar_url: string | null;
-	/** The user's current role in the system. */
-	role: "user" | "admin";
-	/** Unix timestamp (ms) when the user record was created. */
-	created_at: number;
-	/** Unix timestamp (ms) when the user record was last updated. */
-	updated_at: number;
-}
+export type { ApiUser } from "@/api/hooks/useMe";
 
 /**
  * Snapshot of the authentication state managed by `AuthProvider`.
@@ -34,8 +15,8 @@ export interface ApiUser {
  * - `user` — the authenticated user's profile, or `null` while loading or when
  *   unauthenticated.
  * - `isLoading` — `true` until the first `/api/me` response is received.
- * - `error` — `"unauthorized"` for 401/302 responses; an error message string
- *   for network failures; `null` when authenticated successfully.
+ * - `error` — `"unauthorized"` for 401 responses; an error message string
+ *   for other failures; `null` when authenticated successfully.
  */
 interface AuthState {
 	user: ApiUser | null;
@@ -53,8 +34,8 @@ interface AuthContextValue extends AuthState {
 	/**
 	 * Re-fetches `/api/me` and updates the auth state.
 	 *
-	 * Useful when the caller knows the user's session or role may have changed
-	 * (e.g. after an admin promotes the currently signed-in user).
+	 * Delegates to TanStack Query's `refetch` internally.
+	 * Useful when the caller knows the user's session or role may have changed.
 	 */
 	refetch: () => void;
 }
@@ -70,13 +51,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 /**
  * Provides authentication state to the component tree below it.
  *
- * On mount it calls `GET /api/me` to determine whether the current session is
- * authenticated and retrieves the user's profile. All components that need the
- * current user must be rendered inside this provider.
+ * Delegates entirely to the `useMe` TanStack Query hook so that the auth
+ * state benefits from caching, deduplication, and stale-while-revalidate
+ * semantics. **Must be rendered inside a `QueryClientProvider`.**
  *
- * Error codes:
- * - `error === "unauthorized"` — returned for 401 and 302 responses, which
- *   downstream components use to redirect the user to the login page.
+ * Error mapping:
+ * - `error === "unauthorized"` — returned when `useMe` fails with an
+ *   `ApiError` whose `status === 401`. Downstream components use this to
+ *   redirect the user to the login page.
  * - Other non-empty `error` strings — network or server errors.
  *
  * @param props - Component props.
@@ -84,50 +66,31 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  *
  * @example
  * ```tsx
- * <AuthProvider>
- *   <App />
- * </AuthProvider>
+ * // Must be wrapped in QueryClientProvider:
+ * <QueryClientProvider client={queryClient}>
+ *   <AuthProvider>
+ *     <App />
+ *   </AuthProvider>
+ * </QueryClientProvider>
  * ```
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
-	const [state, setState] = useState<AuthState>({
-		user: null,
-		isLoading: true,
-		error: null,
-	});
+	const { data: user, isLoading, error, refetch } = useMe();
 
-	/**
-	 * Fetches the current user from `/api/me` and updates state.
-	 * Wrapped in useCallback so it is stable across renders and can be safely
-	 * listed as a useEffect dependency.
-	 */
-	const fetchUser = useCallback(async () => {
-		setState((prev) => ({ ...prev, isLoading: true, error: null }));
-		try {
-			const res = await fetch("/api/me");
-			if (!res.ok) {
-				if (res.status === 401 || res.status === 302) {
-					setState({ user: null, isLoading: false, error: "unauthorized" });
-					return;
-				}
-				throw new Error(`Failed to fetch user: ${res.status}`);
-			}
-			const body = (await res.json()) as { data: ApiUser };
-			setState({ user: body.data, isLoading: false, error: null });
-		} catch (err) {
-			setState({
-				user: null,
-				isLoading: false,
-				error: err instanceof Error ? err.message : "Unknown error",
-			});
-		}
-	}, []);
+	const errorMessage = error ? ((error as ApiError).status === 401 ? "unauthorized" : (error as Error).message) : null;
 
-	useEffect(() => {
-		fetchUser();
-	}, [fetchUser]);
-
-	return <AuthContext.Provider value={{ ...state, refetch: fetchUser }}>{children}</AuthContext.Provider>;
+	return (
+		<AuthContext.Provider
+			value={{
+				user: user ?? null,
+				isLoading,
+				error: errorMessage,
+				refetch,
+			}}
+		>
+			{children}
+		</AuthContext.Provider>
+	);
 }
 
 /**

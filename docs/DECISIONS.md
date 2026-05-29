@@ -335,3 +335,45 @@ This is semantically equivalent, avoids the sub-router type complexity, and keep
 **Decision:** A static `import catalogData from "../../../../catalog/services.json"` in `src/shared/src/__tests__/catalog.test.ts` would resolve a file outside the TypeScript `rootDir` (`src/shared/src/`). With `composite: true` and `isolatedModules: true`, TypeScript may emit `TS6059` for source files outside `rootDir`. Using `createRequire(import.meta.url)` instead loads the JSON at runtime through Node's CommonJS require, which TypeScript does not attempt to emit, sidestepping the constraint entirely.
 
 **Resolution:** The shared catalog test imports the JSON with `const require = createRequire(import.meta.url); const catalogData: CatalogData = require("../../../../catalog/services.json")`. A `CatalogData` type annotation provides full type safety without a static import path.
+
+---
+
+## ISSUE-11 — Typed API client + TanStack Query hooks + tests
+
+### Local snake_case `ApiUser` type instead of shared `User` type in `useMe` and `useAuth`
+
+**Decision:** The issue spec says to use `type { User } from "@architect/shared"` for the `useMe` hook's generic type parameter. However, all API endpoints (`/api/me`, `/api/admin/users`, etc.) return snake_case JSON (`avatar_url`, `created_at`, `updated_at`) because the route handlers explicitly map Drizzle's camelCase column names back to snake_case wire format. The shared `User` type uses camelCase (`avatarUrl`, `createdAt`, `updatedAt`).
+
+Using `User` (camelCase) as the generic type while the actual runtime value is snake_case would be a silent type bug: TypeScript would compile without error, but accessing `user.avatarUrl` would return `undefined` at runtime since the property is actually `avatar_url`.
+
+**Resolution:** `useMe.ts` defines and exports a local `ApiUser` interface (snake_case) that accurately reflects the API wire format. `useAuth.tsx` imports `ApiUser` from `useMe.ts` and continues to expose `user: ApiUser | null` — which is wire-format compatible. This decision extends the pattern established in ISSUE-10. A follow-up issue should either:
+
+1. Update the API endpoints to return camelCase, OR
+2. Add an explicit mapping layer in `apiClient` to transform snake_case responses to camelCase before returning them to hooks.
+
+### Local snake_case `AdminUser` type with `diagram_count` in `useAdmin`
+
+**Decision:** The issue spec defines `AdminUsersResponse.users` as `User[]` (shared camelCase type). The actual `GET /api/admin/users` response returns snake_case fields plus a `diagram_count` field not present in the shared `User` type. Using `User[]` would silently mistype the actual shape.
+
+**Resolution:** `useAdmin.ts` defines a local `AdminUser` interface (snake_case) that includes `diagram_count`. The `AdminUsersResponse` interface uses the actual API response structure, with pagination metadata nested under a `pagination` key (matching the actual `success({ users, pagination: { page, limit, total, totalPages } })` response), rather than the flat structure shown in the issue spec (`{ users, total, page, limit }`).
+
+### Existing tests updated to wrap `AuthProvider` with `QueryClientProvider`
+
+**Decision:** The issue spec says "wrap the test renders in the query wrapper." All six test files that render `<AuthProvider>` directly — `ProtectedRoute.test.tsx`, `AppShell.test.tsx`, `AdminRoute.test.tsx`, `Admin.test.tsx`, `useAuth.test.tsx` (updated as instructed), plus any future tests — must wrap with `createQueryWrapper().Wrapper` because `AuthProvider` now calls `useMe` (a TanStack Query hook) internally.
+
+**Resolution:** All six affected test files were updated to import and use `createQueryWrapper()`.
+
+### `useAuth.test.tsx` error mocks provide JSON bodies for API client compatibility
+
+**Decision:** The original ISSUE-10 `useAuth` tests mocked 401 responses as `new Response(null, { status: 401 })`. The ISSUE-11 `apiClient` calls `await res.json()` before checking `!res.ok`, which throws a SyntaxError on a null/empty body. Two tests were updated:
+
+- "sets error to 'unauthorized' on 401 response": mock now returns `JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Not authenticated" } })`.
+- "sets error message on non-401 server error response": previously checked for "Failed to fetch user: 500" (raw status code); now returns a proper JSON error envelope and checks for "Internal server error" (from the error message field).
+
+The "sets generic error message when a non-Error value is thrown" test was removed. This test covered the `err instanceof Error ? err.message : "Unknown error"` branch in the old raw-fetch implementation. The refactored `useAuth` delegates entirely to TanStack Query, which handles non-Error rejections differently. Testing this case would test TanStack Query's internal error handling (a library behavior), not any code we wrote.
+
+### Mutation assertions use `act()` scope instead of post-`act` result state
+
+**Decision:** TanStack Query v5 updates mutation result state (`.data`, `.isSuccess`) asynchronously via React state updates. Asserting on `result.current.data?.title` or `result.current.isSuccess` immediately after an `await act(async () => { ... })` block is unreliable because the React re-render triggered by TanStack Query's state update may not have flushed into `result.current`.
+
+**Resolution:** Tests that need to assert on the mutation's return value now check the return value of `mutateAsync` inside the `act` block (which resolves synchronously with the returned data). Tests that need to assert on `isSuccess` use `await waitFor(() => ...)` after `act` to wait for the state update to flush.
