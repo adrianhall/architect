@@ -141,6 +141,28 @@ A committed `wrangler.test.jsonc` provides the D1 binding configuration for test
 
 ---
 
+## ISSUE-05 — User provisioning + admin seeding + /api/me + tests
+
+### `ulid` moved from devDependencies to dependencies
+
+**Decision:** `ulid` was placed in `devDependencies` during ISSUE-03/04 setup. Because `ulid()` is called inside the production route handler (`routes/me.ts`) to generate user IDs, it must be in `dependencies` so that the bundled Worker includes it at runtime.
+
+**Resolution:** Moved `ulid: "^3.0.2"` from `devDependencies` to `dependencies` in `src/worker/package.json`. No version change.
+
+### `wrangler.test.jsonc` `SEED_ADMIN_EMAIL` updated to `admin@test.com`
+
+**Decision:** The original `wrangler.test.jsonc` set `SEED_ADMIN_EMAIL = "test@example.com"`. The `GET /api/me` integration tests use `admin@test.com` as the seed admin email (matching the `createMockEnv` default in `helpers.ts`). Using `test@example.com` would make the admin-seeding tests fail because the email would not match.
+
+**Resolution:** Changed `SEED_ADMIN_EMAIL` in `wrangler.test.jsonc` from `"test@example.com"` to `"admin@test.com"`. This matches the test expectations and the default in `createMockEnv`.
+
+### Local `MeEnv` type in `routes/me.ts` instead of importing `WorkerEnv`
+
+**Decision:** The issue spec defines a local `MeEnv` type for the `me` sub-router. Using the project's shared `WorkerEnv` from `types.ts` is an option, but it would introduce a dependency from a route file to the root types module. A local minimal type keeps the route self-contained and matches the pattern used in `middleware/admin.ts` (which also defines a local binding type).
+
+**Resolution:** Kept the local `MeEnv` type in `routes/me.ts` as specified. It includes only the bindings the route actually uses (`DB`, `SEED_ADMIN_EMAIL`) and the `AuthVariables` for context vars.
+
+---
+
 ## ISSUE-04 — Auth middleware + structured logging + test helpers
 
 ### `test/helpers.ts` placed at `src/worker/src/test/helpers.ts`, not `src/worker/test/helpers.ts`

@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cfAccessMiddleware, devAuthMiddleware } from "./middleware/auth";
 import { loggerMiddleware } from "./middleware/logger";
+import { me } from "./routes/me";
+import { version } from "./routes/version";
 import type { WorkerEnv } from "./types";
 
 /**
@@ -14,20 +16,38 @@ import type { WorkerEnv } from "./types";
  * 3. `cfAccessMiddleware` — validates the CF Access JWT (HMAC in dev, RS256 in
  *    production) and sets `userEmail` / `userSub` on the Hono context.
  *
- * Route handlers are added in subsequent issues (ISSUE-05 onwards). The
- * catch-all at the bottom serves the built React SPA via the Workers Assets
- * binding for all paths not matched by an API route.
+ * Route mounting:
+ * - `GET /api/version` — public; returns the application version.
+ * - `GET /api/me`      — protected; returns the current user's profile,
+ *   auto-provisioning a DB record on first request.
+ * - `GET *`            — catch-all; proxies to the Workers Assets binding
+ *   so the built React SPA is served for all non-API paths.
+ *
+ * Placeholder routes for future issues:
+ * - `/api/catalog`  (ISSUE-08)
+ * - `/api/diagrams` (ISSUE-06)
+ * - `/api/admin`    (ISSUE-07)
  */
 const app = new Hono<WorkerEnv>();
 
-// ── Middleware ────────────────────────────────────────────────────────────────
+// ── Middleware (order matters!) ───────────────────────────────────────────────
+// 1. Logger wraps entire request lifecycle for accurate timing.
+// 2. developerAuthentication MUST come before cloudflareAccess.
+// 3. cloudflareAccess validates JWT and sets userEmail / userSub on context.
 
 app.use(loggerMiddleware);
 app.use(devAuthMiddleware);
 app.use(cfAccessMiddleware);
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-// API routes are added in ISSUE-05 and later.
+
+app.route("/api/version", version);
+app.route("/api/me", me);
+
+// Placeholder routes for future issues:
+// app.route("/api/catalog", catalog);   // ISSUE-08
+// app.route("/api/diagrams", diagrams); // ISSUE-06
+// app.route("/api/admin", admin);       // ISSUE-07
 
 // ── Asset catch-all ───────────────────────────────────────────────────────────
 
