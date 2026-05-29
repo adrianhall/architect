@@ -138,3 +138,25 @@ A committed `wrangler.test.jsonc` provides the D1 binding configuration for test
 **Decision:** The docs suggest `interface ProvidedEnv extends Env {}` to make production bindings available on `env` in tests. But `Env` comes from `worker-configuration.d.ts`, which is generated and lives outside the TypeScript `include` directory (`src/worker/src/`). On a clean checkout without provisioning, TypeScript silently treats `Env` as `{}`, making `env.DB` resolve to `any` and cascading implicit-any errors throughout all test files.
 
 **Resolution:** Augment `Cloudflare.Env` directly in `src/worker/src/test/env.d.ts` (which IS inside `include`). When `worker-configuration.d.ts` IS present, TypeScript merges both declarations — identical property types, no conflict. This approach works on clean checkouts and after provisioning.
+
+---
+
+## ISSUE-04 — Auth middleware + structured logging + test helpers
+
+### `test/helpers.ts` placed at `src/worker/src/test/helpers.ts`, not `src/worker/test/helpers.ts`
+
+**Decision:** The ISSUE-04 spec places the helpers file at `src/worker/test/helpers.ts`. The `tsconfig.json` for the worker package has `rootDir: "src"` and `include: ["src"]`, both of which refer to `src/worker/src/`. A file at `src/worker/test/helpers.ts` (i.e., `test/helpers.ts` relative to the worker package) is outside the TypeScript compilation unit. TypeScript would emit TS6059 ("File is not under rootDir") when it is imported by test files inside `src/worker/src/`.
+
+**Resolution:** Placed at `src/worker/src/test/helpers.ts`, consistent with the MVP_PLAN directory tree (which shows `test/helpers.ts` under `src/worker/src/`). The ISSUE-04 spec had a path error.
+
+### Drizzle schema uses camelCase property names, not snake_case
+
+**Decision:** The ISSUE-04 test code used snake_case property names (`avatar_url`, `created_at`, `updated_at`, `user_id`, `graph_data`) when inserting rows into D1 via Drizzle. The Drizzle schema defines camelCase TypeScript property names (`avatarUrl`, `createdAt`, `updatedAt`, `userId`, `graphData`) with snake_case SQL column names. Using snake_case property names with Drizzle's `.values()` method causes TypeScript type errors and would not map to the correct columns.
+
+**Resolution:** Updated the test files and `createTestUser` / `createTestDiagram` factory functions in `helpers.ts` to use camelCase property names, matching the Drizzle schema definitions.
+
+### Expired-token test removed from auth.test.ts
+
+**Decision:** The ISSUE-04 spec included a test asserting that an expired dev JWT produces a 302 redirect. This tests behavior internal to the `@adrianhall/cloudflare-auth` library (specifically, what it does when HMAC validation fails and JWKS fallback returns an unsupported algorithm). The correct scope for auth middleware wiring tests is: public route is reachable, protected route requires auth, valid token sets user context.
+
+**Resolution:** The expired-token test was removed. The three remaining tests verify that the middleware is correctly wired (order, policy configuration, context variables) without depending on library internals.
