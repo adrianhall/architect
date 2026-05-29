@@ -17,8 +17,8 @@ import { signDevJwt } from "@adrianhall/cloudflare-auth";
 const email = process.argv[2];
 
 if (!email) {
-  process.stderr.write("Usage: node scripts/get-dev-token.mjs <email>\n");
-  process.exit(1);
+	process.stderr.write("Usage: node scripts/get-dev-token.mjs <email>\n");
+	process.exit(1);
 }
 
 const token = await signDevJwt(email);
