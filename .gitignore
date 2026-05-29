@@ -116,5 +116,8 @@ node_modules/
 # Build output
 dist
 
+# Vite frontend build output (served by the Worker via ASSETS binding)
+src/worker/public/
+
 # MacOS State files
 .DS_Store

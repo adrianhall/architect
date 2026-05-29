@@ -1,35 +1,26 @@
-/**
- * Frontend application entry point for CF-Architect.
- *
- * This is a placeholder implementation. The full React application — including
- * routing, auth context, and the diagram canvas — will be built out in
- * ISSUE-09 and subsequent frontend issues.
- *
- * @example
- * ```tsx
- * import { App } from "./main.js";
- * import { createRoot } from "react-dom/client";
- *
- * const root = createRoot(document.getElementById("root")!);
- * root.render(<App />);
- * ```
- */
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { App } from "./App";
+import "./app.css";
 
 /**
- * Root application component.
+ * Application entry point.
  *
- * Renders a placeholder div until the full React application shell is wired
- * up in ISSUE-09. This stub is intentionally minimal — it exists to validate
- * the TypeScript JSX transform and Vitest project wiring for the frontend.
+ * Mounts the React 18 app into the `#root` DOM element. The root element is
+ * guaranteed to exist because it is defined in `index.html`; an explicit error
+ * is thrown if it is missing so failures surface immediately rather than
+ * producing a blank page.
  *
- * @returns A placeholder `<div>` element indicating the app is not yet implemented.
- *
- * @example
- * ```tsx
- * <App />
- * // renders: <div>CF-Architect — not yet implemented</div>
- * ```
+ * Tailwind CSS v4 is activated by the `app.css` import, which includes the
+ * `@import "tailwindcss"` directive processed by the `@tailwindcss/vite` plugin.
  */
-export function App() {
-	return <div>CF-Architect — not yet implemented</div>;
+const rootElement = document.getElementById("root");
+if (!rootElement) {
+	throw new Error("Root element not found");
 }
+
+createRoot(rootElement).render(
+	<StrictMode>
+		<App />
+	</StrictMode>,
+);

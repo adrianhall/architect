@@ -23,6 +23,11 @@
 		"indentStyle": "tab",
 		"lineWidth": 120
 	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
 	"files": {
 		"includes": ["**", "!**/*.d.ts", "!infra"]
 	}

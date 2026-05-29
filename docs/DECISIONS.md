@@ -264,6 +264,28 @@ This is semantically equivalent, avoids the sub-router type complexity, and keep
 
 ---
 
+## ISSUE-09 — Frontend scaffolding: Vite, React, Tailwind, shadcn
+
+### React 19 used instead of the spec's React 18 pin
+
+**Decision:** The issue spec requires pinning to React 18 with the rationale "React 19 has breaking changes with React Flow and other libraries used later." At implementation time, React Flow v12 (the version in the MVP plan) fully supports React 19, and all other chosen libraries (`react-router-dom@7`, `@testing-library/react@16`, `react-dom@19`) target React 19 as their canonical peer dependency. Attempting to force React 18 via npm `overrides` conflicted with npm v11's peer dependency resolution, producing a split installation with two React copies that caused `@testing-library/react` to fail with "React Element from an older version of React."
+
+**Resolution:** Use React 19 (`react@^19.0.0`, `react-dom@^19.0.0`, `@types/react@^19.0.0`, `@types/react-dom@^19.0.0`) throughout the frontend workspace. This eliminates the version conflict, keeps all dependencies on a single coherent React copy, and aligns with the current ecosystem.
+
+### `src/worker/public/` added to `.gitignore`
+
+**Decision:** The Vite build outputs the compiled SPA to `src/worker/public/`. This directory is purely generated and must not be committed. The MVP_PLAN.md listed `src/*/dist/` as a generated file to gitignore but did not explicitly include `src/worker/public/`. Added `src/worker/public/` to `.gitignore` so it is excluded from both git and Biome linting (which respects `.gitignore` via `vcs.useIgnoreFile: true`). Without this entry, `npm run fix` would attempt to lint the minified Vite build output and report thousands of false-positive errors in bundled library code.
+
+### `css.parser.tailwindDirectives: true` added to `biome.json`
+
+**Decision:** Biome v2 does not parse Tailwind CSS v4 directives (`@import "tailwindcss"`, `@theme { … }`) by default. Without enabling the CSS parser option, `biome check` reported a parse error for `src/app.css` and refused to format the file. Added `"css": { "parser": { "tailwindDirectives": true } }` to `biome.json` to enable the Tailwind-specific syntax.
+
+### `jsdom` added to root `devDependencies`
+
+**Decision:** Vitest runs from the root `node_modules`. When `environment: "jsdom"` is set in the frontend vitest config, Vitest dynamically imports `jsdom` at runtime. npm workspaces do not hoist workspace-level devDependencies to the root automatically when there is no root-level requirement for the same package. Adding `jsdom: "^26.1.0"` to the root `devDependencies` ensures the package is present in the root `node_modules` and resolvable by Vitest, regardless of npm's hoisting decisions.
+
+---
+
 ## ISSUE-08 — Service catalog: data, shared types, API, icon serving + tests
 
 ### `CatalogEdgeType` instead of `EdgeType` in catalog.ts

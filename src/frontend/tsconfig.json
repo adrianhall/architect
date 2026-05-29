@@ -14,7 +14,10 @@
 		"composite": true,
 		"jsx": "react-jsx",
 		"outDir": "dist",
-		"rootDir": "src"
+		"rootDir": "src",
+		"paths": {
+			"@/*": ["./src/*"]
+		}
 	},
 	"include": ["src"],
 	"references": [{ "path": "../shared" }]
