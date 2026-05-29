@@ -148,8 +148,18 @@ export function DiagramCard({ id, title, updatedAt }: DiagramCardProps) {
 	 * the subsequent `click` event reaches this handler.
 	 */
 	const handleCardClick = (e: React.MouseEvent) => {
-		if (isRenaming || willRenameRef.current || showDeleteDialog) return;
 		const target = e.target as HTMLElement;
+		// DEBUG — remove before merging to main
+		console.debug("[DiagramCard] handleCardClick", {
+			id,
+			title,
+			targetTag: target.tagName,
+			targetClass: target.className.slice(0, 60),
+			isRenaming,
+			willRenaming: willRenameRef.current,
+			showDeleteDialog,
+		});
+		if (isRenaming || willRenameRef.current || showDeleteDialog) return;
 		if (target.closest("[data-dropdown-trigger]")) return;
 		navigate(`/editor/${id}`);
 	};
@@ -281,12 +291,29 @@ export function DiagramCard({ id, title, updatedAt }: DiagramCardProps) {
 									willRenameRef.current = true;
 									setIsRenaming(true);
 								}}
+								// stopPropagation prevents the click from bubbling through
+								// React's synthetic-event tree to the Card's onClick. Without
+								// this, handleCardClick fires for every menu item click. The
+								// closure it captures may pre-date the flushSync update that
+								// onSelect triggered, so state guards like showDeleteDialog
+								// would read stale values.
+								onClick={(e) => e.stopPropagation()}
 							>
 								Rename
 							</DropdownMenuItem>
-							<DropdownMenuItem onSelect={() => void handleDuplicate()}>Duplicate</DropdownMenuItem>
+							<DropdownMenuItem onSelect={() => void handleDuplicate()} onClick={(e) => e.stopPropagation()}>
+								Duplicate
+							</DropdownMenuItem>
 							<DropdownMenuSeparator />
-							<DropdownMenuItem className="text-destructive" onSelect={() => setShowDeleteDialog(true)}>
+							<DropdownMenuItem
+								className="text-destructive"
+								onSelect={() => {
+									// DEBUG — remove before merging to main
+									console.debug("[DiagramCard] Delete onSelect fired", { id, title });
+									setShowDeleteDialog(true);
+								}}
+								onClick={(e) => e.stopPropagation()}
+							>
 								Delete
 							</DropdownMenuItem>
 						</DropdownMenuContent>
