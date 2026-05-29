@@ -416,3 +416,22 @@ Tests that only verify the dialog/confirmation outcome (e.g., AlertDialog appear
 ### `vi.useFakeTimers({ shouldAdvanceTime: true })` for debounce mutation test
 
 **Decision:** To test that the `renameMutation.mutate()` call inside the 1-second `saveRename` debounce fires correctly, we use `vi.useFakeTimers({ shouldAdvanceTime: true })` combined with `userEvent.setup({ delay: null })`. The `shouldAdvanceTime: true` option makes the fake clock advance at real time (so `waitFor` and `findByRole` polling continue to work), while still allowing `vi.advanceTimersByTime(1001)` to jump over the debounce. Real timers are restored before the final `waitFor` assertion so polling works normally.
+
+### `stopPropagation` on all DropdownMenuItems to prevent card navigation
+
+**Decision:** Clicking any `DropdownMenuItem` (Rename, Duplicate, Delete) caused the Card's `onClick` (`handleCardClick`) to fire and navigate to the editor. The state guard `if (showDeleteDialog) return` was ineffective because `handleCardClick` captured a **pre-`flushSync` closure** where `showDeleteDialog` was still `false` — even though `setShowDeleteDialog(true)` had been committed by `ReactDOM.flushSync` inside Radix's `dispatchDiscreteCustomEvent`. React snapshots event handlers at the start of event dispatch, before any `flushSync` mid-dispatch can update them.
+
+Duplicate had the same latent bug (two navigations: to the original, then to the copy — the second won so it appeared to work). Rename was immune only because `willRenameRef` is a ref (always current), not closure state.
+
+**Resolution:** Added `onClick={(e) => e.stopPropagation()}` to all three `DropdownMenuItem` elements. Radix's `composeEventHandlers` checks `e.defaultPrevented` (not propagation), so `onSelect` / `handleSelect` still fires — the click simply never reaches the Card.
+
+### Tailwind v4: `--spacing-{name}` tokens shadow `--container-{name}` for `max-w-*`
+
+**Decision:** The `app.css` `@theme` block defined `--spacing-sm: 0.5rem`, `--spacing-md: 1rem`, `--spacing-lg: 1.5rem`, etc. In Tailwind v4, `max-w-{name}` resolves to `var(--container-{name})` with a **fallback to `var(--spacing-{name})`** when no container token exists. Our custom spacing tokens shadowed the default container scale, causing `max-w-lg` to compute as `1.5rem` (24px) instead of `32rem` (512px).
+
+This produced two visible bugs:
+
+- **AlertDialog**: `max-w-lg` = 24px → the dialog content had 0px computed width (padding only). The white background was ~50px wide while text overflowed visibly.
+- **EmptyState description**: `max-w-md` = 16px → text wrapped word-by-word and the narrow block centered at the viewport midpoint.
+
+**Resolution:** Removed all `--spacing-{name}` custom tokens from `@theme`. Tailwind v4 uses a single `--spacing` base multiplier (`0.25rem`) with numeric utilities (`p-4` = 1rem, `gap-6` = 1.5rem). Named size tokens (`sm`/`md`/`lg`) belong to the `--container-*` namespace, which Tailwind v4 provides at the correct default values when `--spacing-*` does not shadow them. Added a comment in `app.css` explaining the constraint to prevent reintroduction.
