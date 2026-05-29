@@ -241,16 +241,23 @@ check "data.pagination.totalPages is a number"        "$(( $(field '.data.pagina
 check "each user has diagram_count field"             "$(field '.data.users[0] | has("diagram_count")')" "true"
 check "each user has id, email, role fields"          "$(field '.data.users[0] | [has("id"), has("email"), has("role")] | all')" "true"
 
-# Create a diagram as the target user so we can verify diagram_count.
+# Snapshot the target's current diagram_count before adding another diagram.
+# (The user persists between runs, so the count may already be > 0.)
+as_admin GET "/api/admin/users?search=smoketest-target07"
+COUNT_BEFORE="$(field ".data.users[] | select(.id == \"${TARGET_ID}\") | .diagram_count")"
+
+# Create a diagram as the target user so we can verify diagram_count increments.
 as_token "$TARGET_TOKEN" POST "/api/diagrams" '{"title":"Smoke Test Diagram for Admin Count"}'
 check "Target user can create a diagram (201)"        "$LAST_STATUS"  "201"
 DIAGRAM_ID="$(field '.data.id')"
 echo "  Target's diagram ID: ${DIAGRAM_ID}"
 
-# Verify diagram_count via admin list search.
-as_admin GET "/api/admin/users?search=$(printf '%s' "$TARGET_EMAIL" | jq -sRr @uri)"
+# Verify diagram_count increased by exactly 1.
+as_admin GET "/api/admin/users?search=smoketest-target07"
 TARGET_COUNT="$(field ".data.users[] | select(.id == \"${TARGET_ID}\") | .diagram_count")"
-check "Target user diagram_count is 1 after creating diagram" "$TARGET_COUNT" "1"
+EXPECTED_COUNT="$(( COUNT_BEFORE + 1 ))"
+check "Target user diagram_count increased by 1 after creating diagram" \
+  "$TARGET_COUNT" "$EXPECTED_COUNT"
 
 # Search by email substring.
 SEARCH_TERM="smoketest-target07"
