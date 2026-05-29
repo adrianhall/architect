@@ -74,3 +74,18 @@ Since `vcs.useIgnoreFile: true` already excludes `.gitignore` entries (`node_mod
 **Decision:** The cloudflare-scripts skill referenced tag `v1.0.2` which did not exist on the GitHub repo at implementation time (only `v1.0.1` and `1.0.0` were released tags). The `main` branch contains version `1.0.2` code.
 
 **Resolution:** Installed from `github:adrianhall/cloudflare-scripts` (main branch). The `package.json` devDependency is pinned to the GitHub source. Once a `v1.0.2` tag is released, the reference should be updated to `github:adrianhall/cloudflare-scripts#v1.0.2`.
+
+---
+
+## ISSUE-02 amendment — Cloudflare Access resources
+
+### Separate `cloudflare_zero_trust_access_policy` and `cloudflare_zero_trust_access_application` resources
+
+**Decision:** Added two new Terraform resources to protect the Worker with Cloudflare Access. Per the user's requirement, resources are kept separate (not embedded) because embedded policies in the Access application are deprecated in the v5 provider.
+
+- **`cloudflare_zero_trust_access_policy.allow_idp`** — Account-level, reusable policy. `decision = "allow"` with a single `include` rule using `login_method.id = local.idp_id`. This allows any user who successfully authenticates through the configured IdP, regardless of email domain.
+- **`cloudflare_zero_trust_access_application.app`** — Self-hosted application protecting `${worker_name}.${workers_domain}`. Uses `account_id` (not `zone_id`) because workers.dev is an account-level domain, not a zone. Sets `allowed_idps = [local.idp_id]` to restrict the login screen to the configured IdP and `auto_redirect_to_identity = true` to skip the Cloudflare Access landing page. Links to the policy via `policies = [{ id = ..., precedence = 1 }]`.
+
+**New `.env` variables consumed:** `CLOUDFLARE_IDP_ID` (IdP UUID) and `CLOUDFLARE_WORKERS_DOMAIN` (e.g., `abc123.workers.dev`) — both added to `locals` in `main.tf`. Both were already documented in the updated `.env.example`.
+
+**Verified:** `npm run provision` created all 4 resources (worker, D1 database, Access policy, Access application) successfully. `terraform plan` on a second run shows "No changes" — fully idempotent.
