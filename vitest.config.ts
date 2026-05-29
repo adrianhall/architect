@@ -25,8 +25,18 @@ export default defineConfig({
 		coverage: {
 			provider: "v8",
 			// Exclude worker source — v8 cannot instrument code in the Workers runtime.
-			include: ["src/frontend/src/**"],
-			exclude: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/test/**", "**/*.sql", "**/*.json"],
+			include: ["src/frontend/src/**", "src/shared/src/**"],
+			exclude: [
+				"src/**/*.test.ts",
+				"src/**/*.test.tsx",
+				"src/**/test/**",
+				"**/*.sql",
+				"**/*.json",
+				// shadcn/ui components are generated third-party patterns.
+				// Unused sub-components (CardTitle, DropdownMenuCheckboxItem, etc.)
+				// would unfairly lower coverage metrics for our own code.
+				"src/frontend/src/components/ui/**",
+			],
 		},
 	},
 });

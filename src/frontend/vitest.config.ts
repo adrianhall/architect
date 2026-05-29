@@ -26,7 +26,14 @@ export default defineConfig({
 		setupFiles: ["./src/test/setup.ts"],
 		coverage: {
 			include: ["src/**"],
-			exclude: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+			exclude: [
+				"src/**/*.test.ts",
+				"src/**/*.test.tsx",
+				// shadcn/ui components are generated third-party patterns — coverage
+				// for unused sub-components (CardTitle, DropdownMenuCheckboxItem, etc.)
+				// would artificially lower our metrics without reflecting code quality.
+				"src/components/ui/**",
+			],
 		},
 	},
 });

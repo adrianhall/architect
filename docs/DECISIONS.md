@@ -377,3 +377,42 @@ The "sets generic error message when a non-Error value is thrown" test was remov
 **Decision:** TanStack Query v5 updates mutation result state (`.data`, `.isSuccess`) asynchronously via React state updates. Asserting on `result.current.data?.title` or `result.current.isSuccess` immediately after an `await act(async () => { ... })` block is unreliable because the React re-render triggered by TanStack Query's state update may not have flushed into `result.current`.
 
 **Resolution:** Tests that need to assert on the mutation's return value now check the return value of `mutateAsync` inside the `act` block (which resolves synchronously with the returned data). Tests that need to assert on `isSuccess` use `await waitFor(() => ...)` after `act` to wait for the state update to flush.
+
+---
+
+## ISSUE-12 — Dashboard page: card grid, CRUD actions, empty state + tests
+
+### AlertDialog installed as `alert-dialog.tsx`, imported from `@/components/ui/alert-dialog`
+
+**Decision:** The issue spec imports `AlertDialog` from `@/components/ui/dialog`. Standard shadcn installs AlertDialog as a separate file (`alert-dialog.tsx`). We installed it separately with `npx shadcn@latest add alert-dialog` and updated the import path to `@/components/ui/alert-dialog`. This matches the shadcn canonical pattern and avoids the risk of merging two unrelated dialog primitives into one file.
+
+### `class-variance-authority` and `lucide-react` added explicitly to frontend `package.json`
+
+**Decision:** The shadcn CLI installs Radix UI packages into `node_modules` via its own npm calls but does not update `src/frontend/package.json` for transitive peer dependencies like `class-variance-authority` (used by `button.tsx`) and `lucide-react` (used by `dialog.tsx` and `dropdown-menu.tsx`). TypeScript type checking fails without explicit entries because npm hoisting is not guaranteed in workspace setups.
+
+**Resolution:** Added `class-variance-authority` and `lucide-react` as explicit `dependencies` in `src/frontend/package.json`.
+
+### Radix DropdownMenuItem: `onSelect` instead of `onClick` for state changes
+
+**Decision:** The issue spec uses `onClick` handlers on `DropdownMenuItem` to trigger state changes (`setIsRenaming`, `setShowDeleteDialog`, `handleDuplicate`). In practice, Radix DropdownMenu closes the portal content on `pointerup` (via `onSelect → rootContext.onClose()`). By the time the native `click` event fires, the `DropdownMenuContent` portal may already be unmounting, causing React to discard the `onClick` handler silently.
+
+**Resolution:** Moved all state-change logic to `onSelect` callbacks. Radix fires `onSelect` via `ReactDOM.flushSync(() => element.dispatchEvent(itemSelectEvent))` — synchronously while the component is still mounted — guaranteeing the state updates are processed. A `willRenameRef` ref prevents the card's `onClick` from navigating before React flushes the `setIsRenaming(true)` update.
+
+### Radix DropdownMenu FocusScope interaction with rename Input
+
+**Decision:** Radix DropdownMenu uses `trapFocus: context.open` on its internal `FocusScope`. When `isRenaming` becomes `true` inside `ReactDOM.flushSync` (during menu item selection), the `useEffect` focus call (`inputRef.current.focus()`) moves focus to the Input while the FocusScope is still active. The trapped FocusScope detects focus outside its container and immediately steals it back, triggering `onBlur → saveRename → setIsRenaming(false)` — the Input disappears before the user can see it.
+
+**Resolution:** Two changes:
+
+1. The `useEffect` that focuses the Input is guarded by `!willRenameRef.current`. When rename is triggered via the dropdown, `willRenameRef.current = true`, so the `useEffect` skips focusing.
+2. The `DropdownMenuContent`'s `onCloseAutoFocus` callback (which fires via `setTimeout(fn, 0)` after the FocusScope unmounts) focuses the Input instead. By this point the FocusScope is gone, so focus is safe.
+
+### Test strategy for Radix DropdownMenuItem interactions in JSDOM
+
+**Decision:** `userEvent.click` on a Radix `DropdownMenuItem` does not reliably trigger the item's `onSelect` callback in JSDOM because the full pointer event sequence is required for Radix's `isPointerDownRef` logic. Tests that need to verify behaviour triggered by selecting a menu item (rename, delete, duplicate) use `fireEvent.click(item)` to dispatch a native click event directly, which fires Radix's `handleSelect → dispatchDiscreteCustomEvent → onSelect` chain correctly.
+
+Tests that only verify the dialog/confirmation outcome (e.g., AlertDialog appears) continue to use `userEvent.click` since `onSelect` fires regardless (it's part of Radix's `onClick` composition chain), and `findByRole("alertdialog")` waits up to 1000ms for the result.
+
+### `vi.useFakeTimers({ shouldAdvanceTime: true })` for debounce mutation test
+
+**Decision:** To test that the `renameMutation.mutate()` call inside the 1-second `saveRename` debounce fires correctly, we use `vi.useFakeTimers({ shouldAdvanceTime: true })` combined with `userEvent.setup({ delay: null })`. The `shouldAdvanceTime: true` option makes the fake clock advance at real time (so `waitFor` and `findByRole` polling continue to work), while still allowing `vi.advanceTimersByTime(1001)` to jump over the debounce. Real timers are restored before the final `waitFor` assertion so polling works normally.
