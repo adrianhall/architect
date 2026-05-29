@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { adminGuard } from "./middleware/admin";
 import { cfAccessMiddleware, devAuthMiddleware } from "./middleware/auth";
 import { loggerMiddleware } from "./middleware/logger";
+import adminUsersRouter from "./routes/admin/users";
 import { diagrams } from "./routes/diagrams";
 import { me } from "./routes/me";
 import { version } from "./routes/version";
@@ -23,12 +25,13 @@ import type { WorkerEnv } from "./types";
  *   profile, auto-provisioning a DB record on first request.
  * - `/api/diagrams`                  — protected; full diagram CRUD API
  *   (create, list, get, update, rename, delete, duplicate).
+ * - `/api/admin`                     — admin-only; user management with audit
+ *   logging. Protected by `adminGuard` applied via path-scoped `use()`.
  * - `GET *`                          — catch-all; proxies to the Workers Assets
  *   binding so the built React SPA is served for all non-API paths.
  *
  * Placeholder routes for future issues:
  * - `/api/catalog` (ISSUE-08)
- * - `/api/admin`   (ISSUE-07)
  */
 const app = new Hono<WorkerEnv>();
 
@@ -47,9 +50,14 @@ app.route("/api/version", version);
 app.route("/api/me", me);
 app.route("/api/diagrams", diagrams);
 
+// Admin routes — protected by auth (global above) + admin role guard.
+// The guard is applied via path-scoped use() so it runs only for /api/admin/*
+// requests, before the route handlers are matched.
+app.use("/api/admin/*", adminGuard);
+app.route("/api/admin/users", adminUsersRouter);
+
 // Placeholder routes for future issues:
 // app.route("/api/catalog", catalog); // ISSUE-08
-// app.route("/api/admin", admin);     // ISSUE-07
 
 // ── Asset catch-all ───────────────────────────────────────────────────────────
 

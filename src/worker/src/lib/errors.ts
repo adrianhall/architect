@@ -26,6 +26,8 @@ export const ErrorCode = {
 	VALIDATION_ERROR: "VALIDATION_ERROR",
 	/** An unexpected server-side error occurred. */
 	INTERNAL_ERROR: "INTERNAL_ERROR",
+	/** An admin attempted to perform an action on their own account (e.g., change own role, delete own account). */
+	SELF_ACTION_FORBIDDEN: "SELF_ACTION_FORBIDDEN",
 } as const;
 
 /**

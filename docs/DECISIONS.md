@@ -185,6 +185,63 @@ A committed `wrangler.test.jsonc` provides the D1 binding configuration for test
 
 ---
 
+## ISSUE-07 — Admin API + structured audit logging + tests
+
+### LEFT JOIN + GROUP BY instead of correlated subquery for diagram count
+
+**Decision:** The issue spec suggests a correlated subquery for `diagram_count`:
+
+```typescript
+const diagramCountExpr = sql<number>`(SELECT COUNT(*) FROM diagrams WHERE diagrams.user_id = ${users.id})`;
+```
+
+In Drizzle ORM with D1, interpolating a column object (`${users.id}`) inside a `sql` template literal generates a parameter binding (`?`) whose value is the column definition object rather than a SQL column reference. This causes the subquery to compare `diagrams.user_id` against a non-string value, returning 0 for every row.
+
+**Resolution:** Replaced the correlated subquery with a LEFT JOIN + GROUP BY:
+
+```typescript
+.from(users)
+.leftJoin(diagrams, eq(diagrams.userId, users.id))
+.groupBy(users.id, /* other columns */)
+.select({ ..., diagramCount: sql<number>`count(${diagrams.id})` })
+```
+
+`COUNT(diagrams.id)` returns 0 for users with no diagrams because the LEFT JOIN produces a NULL `diagrams.id` for those rows and `COUNT` ignores NULLs. This is both correct and efficient (single round-trip for any page size).
+
+### Path-scoped `app.use()` instead of sub-router for admin guard
+
+**Decision:** The issue spec mounts the admin guard via a Hono sub-router:
+
+```typescript
+const adminRoutes = new Hono();
+adminRoutes.use("*", adminGuard);
+adminRoutes.route("/users", adminUsers);
+app.route("/api/admin", adminRoutes);
+```
+
+Using `new Hono()` (no type params) loses type safety for the sub-router context. Using `new Hono<WorkerEnv>()` introduces Hono middleware variance concerns when applying `adminGuard` (typed with a narrower env type).
+
+**Resolution:** Applied the guard directly to the main app with a path pattern, then mounted the route:
+
+```typescript
+app.use("/api/admin/*", adminGuard);
+app.route("/api/admin/users", adminUsersRouter);
+```
+
+This is semantically equivalent, avoids the sub-router type complexity, and keeps all route registrations on the same `app` instance in `index.ts`.
+
+### Test file at `routes/admin/__tests__/users.test.ts` not `test/admin-users.test.ts`
+
+**Decision:** The issue spec places tests at `src/worker/src/test/admin-users.test.ts`. AGENTS.md states: "Place every test file in a `__tests__/` directory next to the directory it covers."
+
+**Resolution:** Placed the test at `src/worker/src/routes/admin/__tests__/users.test.ts` following AGENTS.md. The Vitest `include` pattern `src/**/*.test.ts` picks it up automatically.
+
+### Existing `adminGuard` kept; no new `requireAdmin` created
+
+**Decision:** The issue spec says "If not already created by ISSUE-04/05, create `middleware/admin.ts`." The `adminGuard` middleware was created in ISSUE-05 and queries the DB to check the admin role. It is functionally identical to the spec's `requireAdmin` (which reads a `user` context variable not present in our auth stack). No duplicate export was created.
+
+---
+
 ## ISSUE-04 — Auth middleware + structured logging + test helpers
 
 ### `test/helpers.ts` placed at `src/worker/src/test/helpers.ts`, not `src/worker/test/helpers.ts`
