@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ApiErrorCode, ApiErrorResponse, ApiResponse, ApiSuccessResponse } from "./api.js";
+import type { ApiErrorCode, ApiErrorResponse, ApiResponse, ApiSuccessResponse } from "../api.js";
 
 describe("shared API types", () => {
 	it("should allow constructing a success response", () => {

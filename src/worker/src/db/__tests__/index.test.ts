@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { getDb, schema } from "./index.js";
+import { getDb, schema } from "../index.js";
 
 describe("getDb", () => {
 	it("should be a function", () => {

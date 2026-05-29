@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DiagramEdge, DiagramNode, EdgeType, GraphData, Viewport } from "./diagram.js";
+import type { DiagramEdge, DiagramNode, EdgeType, GraphData, Viewport } from "../diagram.js";
 
 describe("shared diagram types", () => {
 	it("should allow constructing a valid GraphData object", () => {

@@ -91,6 +91,27 @@ script options first**.
 
 ## Testing conventions
 
+- **Tests live in `__tests__/` subdirectories.** Place every test file in a
+  `__tests__/` directory next to the directory it covers, not alongside the
+  source file itself.
+
+  ```text
+  src/
+    middleware/
+      auth.ts
+      logger.ts
+      __tests__/
+        auth.test.ts
+        logger.test.ts
+    db/
+      schema.ts
+      __tests__/
+        schema.test.ts
+  ```
+
+  The vitest `include` pattern `src/**/*.test.ts` picks up `__tests__/` files
+  automatically — no config change is needed when adding a new test directory.
+
 - **Test our code, not library code.** Only write tests that exercise logic
   written in this repository. Do not write tests that verify the behaviour of a
   third-party package — those packages have their own test suites.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { User, UserRole } from "./user.js";
+import type { User, UserRole } from "../user.js";
 
 describe("shared user types", () => {
 	it("should allow constructing a User object", () => {

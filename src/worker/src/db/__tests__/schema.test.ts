@@ -1,6 +1,6 @@
 import { getTableColumns, getTableName } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { diagrams, users } from "./schema.js";
+import { diagrams, users } from "../schema.js";
 
 describe("users schema", () => {
 	it("should have table name 'users'", () => {
