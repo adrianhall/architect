@@ -1,4 +1,4 @@
-<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <circle cx="24" cy="14" r="9"/>
-  <path d="M6 42c0-9.941 8.059-18 18-18s18 8.059 18 18z"/>
+<svg fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <circle cx="24" cy="15" r="9"/>
+  <path d="M6 43a18 18 0 0 1 36 0"/>
 </svg>

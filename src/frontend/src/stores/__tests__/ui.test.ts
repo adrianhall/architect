@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useUIStore } from "../ui";
 
-/** Resets the UI store to its initial empty state between tests. */
+/** Resets the UI store to its initial default state between tests. */
 function resetStore() {
 	useUIStore.setState({
-		collapsedCategories: new Set(),
+		// Mirror the real default: Developer Platform open, the rest collapsed.
+		collapsedCategories: new Set(["zero-trust", "cdn-application", "other"]),
 		selectedNodeId: null,
 		selectedEdgeId: null,
 		panelVisible: true,
@@ -18,9 +19,16 @@ describe("useUIStore", () => {
 	// ── Initial state ──────────────────────────────────────────────────────────
 
 	describe("initial state", () => {
-		it("has all categories expanded by default (empty collapsedCategories set)", () => {
+		it("Developer Platform is expanded by default", () => {
 			const { collapsedCategories } = useUIStore.getState();
-			expect(collapsedCategories.size).toBe(0);
+			expect(collapsedCategories.has("developer-platform")).toBe(false);
+		});
+
+		it("zero-trust, cdn-application, and other are collapsed by default", () => {
+			const { collapsedCategories } = useUIStore.getState();
+			expect(collapsedCategories.has("zero-trust")).toBe(true);
+			expect(collapsedCategories.has("cdn-application")).toBe(true);
+			expect(collapsedCategories.has("other")).toBe(true);
 		});
 
 		it("has no selected node by default", () => {

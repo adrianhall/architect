@@ -102,7 +102,9 @@ interface UIState {
  * ```
  */
 export const useUIStore = create<UIState>((set, get) => ({
-	collapsedCategories: new Set(),
+	// Developer Platform is open by default; the three secondary categories
+	// start collapsed so the palette doesn't overwhelm new users.
+	collapsedCategories: new Set(["zero-trust", "cdn-application", "other"]),
 	selectedNodeId: null,
 	selectedEdgeId: null,
 	panelVisible: true,
