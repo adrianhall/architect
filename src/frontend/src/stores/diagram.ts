@@ -67,6 +67,17 @@ interface DiagramState {
 	addNode: (node: Node) => void;
 
 	/**
+	 * Clears the `selected` flag on every node currently in the store.
+	 *
+	 * Used by the palette drop handler before adding a newly dropped node so
+	 * that only the freshly placed node ends up selected. Mutating `selected`
+	 * directly (rather than via `onNodesChange` / `applyNodeChanges`) avoids
+	 * a dependency on the React Flow utility and works correctly in tests where
+	 * `applyNodeChanges` is replaced with a no-op mock.
+	 */
+	deselectAllNodes: () => void;
+
+	/**
 	 * Removes one or more nodes from the canvas by their IDs.
 	 *
 	 * Also removes any edges whose `source` or `target` matches a removed
@@ -188,6 +199,13 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 
 	addNode: (node) => {
 		set({ nodes: [...get().nodes, node] });
+	},
+
+	deselectAllNodes: () => {
+		const current = get().nodes;
+		// Skip the allocation when nothing is selected.
+		if (!current.some((n) => n.selected)) return;
+		set({ nodes: current.map((n) => (n.selected ? { ...n, selected: false } : n)) });
 	},
 
 	removeNodes: (ids) => {

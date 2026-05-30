@@ -149,7 +149,17 @@ function EditorCanvas() {
 	 * Reads the `typeId` from the drag transfer data, looks up the service in
 	 * the catalog, converts the browser viewport drop coordinates to React Flow
 	 * canvas coordinates (accounting for pan and zoom), and adds a new node at
-	 * that position. The new node is immediately selected per F4-US1 AC.
+	 * that position.
+	 *
+	 * Before adding the new node, every currently-selected node is deselected
+	 * so that only the freshly dropped node ends up selected. This matches the
+	 * behaviour of standard diagramming tools (Figma, Lucidchart, etc.) where
+	 * dropping a component replaces the current selection.
+	 *
+	 * `useDiagramStore.getState()` is used inside the handler instead of
+	 * closing over the `nodes` reactive value. This avoids adding `nodes` to
+	 * the `useCallback` dependency array, which would recreate the handler on
+	 * every node-position change (very frequent during canvas drag operations).
 	 *
 	 * If the drop carries no `typeId`, or the `typeId` is not found in the
 	 * catalog, the drop is silently ignored and no node is created.
@@ -184,9 +194,13 @@ function EditorCanvas() {
 					iconUrl: `/catalog/icons/${service.iconPath}`,
 					categoryColor: category?.color ?? "#6b7280",
 				},
-				// Immediately selected per F4-US1 acceptance criteria.
 				selected: true,
 			};
+
+			// Deselect every currently-selected node so only the dropped node
+			// ends up selected. Reading from getState() avoids a stale closure
+			// without adding `nodes` to the useCallback dependency array.
+			useDiagramStore.getState().deselectAllNodes();
 
 			addNode(newNode);
 		},

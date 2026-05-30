@@ -299,6 +299,26 @@ describe("EditorDrop", () => {
 		expect(node.selected).toBe(true);
 	});
 
+	it("dropping a second node deselects the first node", async () => {
+		renderEditor();
+		await waitForCanvas();
+
+		const canvas = screen.getByTestId("reactflow");
+
+		// Drop the first node — it should be selected.
+		fireEvent(canvas, makeDragEvent("workers"));
+		await waitFor(() => expect(useDiagramStore.getState().nodes).toHaveLength(1));
+		expect(useDiagramStore.getState().nodes[0].selected).toBe(true);
+
+		// Drop a second node — first node must be deselected, second selected.
+		fireEvent(canvas, makeDragEvent("workers"));
+		await waitFor(() => expect(useDiagramStore.getState().nodes).toHaveLength(2));
+
+		const [first, second] = useDiagramStore.getState().nodes;
+		expect(first.selected).toBe(false);
+		expect(second.selected).toBe(true);
+	});
+
 	it("dropping with an unknown typeId does not create a node", async () => {
 		renderEditor();
 		await waitForCanvas();
