@@ -719,3 +719,27 @@ TypeError: U8 is not a constructor
 **Decision:** The issue spec suggests clicking `getByRole("button", { name: /delete|confirm/i })` inside the confirmation dialog. The `UserActions` component renders `<AlertDialogAction>Delete</AlertDialogAction>` (text: "Delete"). There is no "Confirm" button.
 
 **Resolution:** Tests use `dialog.getByRole("button", { name: /^delete$/i })` to match the exact "Delete" button text. The `^` and `$` anchors prevent matching "Delete User" menu items that may still exist in the portal during the dialog transition.
+
+---
+
+## ISSUE-23 — Upgrade TypeScript from 5.8 to 6.0
+
+### `types: ["node"]` added to shared tsconfig
+
+**Decision:** TypeScript 6.0 changes the default for the `types` compiler option from "auto-include all installed `@types/*` packages" to `[]` (empty — no auto-includes). The shared workspace has `@types/node` as a devDependency because `src/shared/src/__tests__/catalog.test.ts` imports `createRequire` from `node:module`. Without an explicit `types` array, TS6 no longer auto-includes `@types/node`, causing TS2591 ("Cannot find name 'node:module'").
+
+**Resolution:** Added `"types": ["node"]` to `src/shared/tsconfig.json`. This is the minimal explicit declaration needed — the shared source files themselves have no global `@types` requirements beyond what is imported.
+
+### `types: ["vite/client"]` added to frontend tsconfig
+
+**Decision:** The frontend `src/main.tsx` contains two CSS side-effect imports:
+- `import "@xyflow/react/dist/style.css"` (React Flow's base styles)
+- `import "./app.css"` (Tailwind CSS v4 directives)
+
+TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new default, which errors (TS2882) on side-effect imports that TypeScript cannot resolve to a module declaration. Neither CSS file has TypeScript types. The Vite client types package (`vite/client`) provides `declare module "*.css"` which covers both the relative import (`./app.css`) and the package-path import (`@xyflow/react/dist/style.css`) via TypeScript's wildcard ambient module matching.
+
+**Resolution:** Added `"types": ["vite/client"]` to `src/frontend/tsconfig.json`. This is consistent with Vite's own scaffolded TypeScript + React template. No `@types/react` or `@types/react-dom` entries are needed because JSX type-checking with `"jsx": "react-jsx"` sources types from the `react/jsx-runtime` module import, not from globally-included `@types` declarations.
+
+### No deprecated options required `ignoreDeprecations`
+
+**Decision:** All TypeScript 6.0 breaking changes were either already handled by explicit settings in the workspace tsconfigs (`module`, `target`, `moduleResolution`, `esModuleInterop`, `rootDir`) or required only the two `types` additions above. No deprecated options (`baseUrl`, `outFile`, `target: es5`, `module: umd/amd/systemjs`, `moduleResolution: node`, `downlevelIteration`, `module namespace {}`) are present in any tsconfig. No `ignoreDeprecations: "6.0"` escape hatch was needed.
