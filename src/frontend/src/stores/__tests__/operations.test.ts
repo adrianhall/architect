@@ -153,6 +153,24 @@ describe("reverseOperation", () => {
 		});
 	});
 
+	describe("update_edge", () => {
+		it("reversal of update_edge swaps from and to, preserving edgeId", () => {
+			const op: Operation = {
+				type: "update_edge",
+				edgeId: "e1",
+				from: { sourceHandle: "right", targetHandle: "left" },
+				to: { sourceHandle: undefined, targetHandle: undefined },
+			};
+			const reversed = reverseOperation(op);
+			expect(reversed.type).toBe("update_edge");
+			if (reversed.type === "update_edge") {
+				expect(reversed.edgeId).toBe("e1");
+				expect(reversed.from).toEqual({ sourceHandle: undefined, targetHandle: undefined });
+				expect(reversed.to).toEqual({ sourceHandle: "right", targetHandle: "left" });
+			}
+		});
+	});
+
 	describe("batch", () => {
 		it("reversal of batch reverses sub-operation order and reverses each sub-operation", () => {
 			// Build a batch of 3 heterogeneous operations.
@@ -349,6 +367,45 @@ describe("applyOperation", () => {
 		});
 	});
 
+	describe("update_edge", () => {
+		it("update_edge merges to onto the matching edge's top-level fields", () => {
+			const edge: Edge = { ...makeEdge("e1", "a", "b"), sourceHandle: "right", targetHandle: "left" };
+			const { edges } = applyOperation([], [edge], {
+				type: "update_edge",
+				edgeId: "e1",
+				from: { sourceHandle: "right", targetHandle: "left" },
+				to: { sourceHandle: undefined, targetHandle: undefined },
+			});
+			expect(edges[0].sourceHandle).toBeUndefined();
+			expect(edges[0].targetHandle).toBeUndefined();
+		});
+
+		it("update_edge preserves fields not mentioned in to", () => {
+			const edge: Edge = { ...makeEdge("e1", "a", "b"), sourceHandle: "right" };
+			const { edges } = applyOperation([], [edge], {
+				type: "update_edge",
+				edgeId: "e1",
+				from: { sourceHandle: "right" },
+				to: { sourceHandle: undefined },
+			});
+			// type and source/target are top-level fields not in to — must be preserved.
+			expect(edges[0].type).toBe("data-flow");
+			expect(edges[0].source).toBe("a");
+		});
+
+		it("update_edge does not modify non-targeted edges", () => {
+			const edge1: Edge = { ...makeEdge("e1", "a", "b"), sourceHandle: "right" };
+			const edge2 = makeEdge("e2", "b", "c");
+			const { edges } = applyOperation([], [edge1, edge2], {
+				type: "update_edge",
+				edgeId: "e1",
+				from: { sourceHandle: "right" },
+				to: { sourceHandle: undefined },
+			});
+			expect(edges[1]).toBe(edge2);
+		});
+	});
+
 	describe("batch", () => {
 		it("batch applies sub-operations in order", () => {
 			// First add nodeA, then add edgeAB. Both should be present.
@@ -431,6 +488,17 @@ describe("round-trip: apply then reverse restores original state", () => {
 			edgeId: "e1",
 			from: { label: "HTTP" },
 			to: { label: "gRPC" },
+		});
+	});
+
+	it("update_edge round-trip (clearing handles)", () => {
+		// Start with an edge that has explicit handles.
+		const edgeWithHandles: Edge = { ...edgeAB, sourceHandle: "right", targetHandle: "left" };
+		roundTrip(initialNodes, [edgeWithHandles], {
+			type: "update_edge",
+			edgeId: "e1",
+			from: { sourceHandle: "right", targetHandle: "left" },
+			to: { sourceHandle: undefined, targetHandle: undefined },
 		});
 	});
 

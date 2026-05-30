@@ -187,4 +187,74 @@ describe("useAutoLayout", () => {
 		// computeLayout should only have been called once.
 		expect(mockComputeLayout).toHaveBeenCalledOnce();
 	});
+
+	it("clears pinned sourceHandle/targetHandle on all edges as part of the layout batch", async () => {
+		// Set up a node and an edge with explicit handles (simulating a LR-drawn edge).
+		useDiagramStore.getState().loadDiagram(
+			"test-id",
+			"Test",
+			[
+				{ id: "a", position: { x: 0, y: 0 }, type: "cloudflareService", data: {} },
+				{ id: "b", position: { x: 200, y: 0 }, type: "cloudflareService", data: {} },
+			],
+			[
+				{
+					id: "e1",
+					source: "a",
+					target: "b",
+					type: "data-flow",
+					sourceHandle: "right",
+					targetHandle: "left",
+					data: {},
+				},
+			],
+			undefined,
+			1,
+		);
+
+		// ELK returns new TB positions.
+		mockComputeLayout.mockResolvedValue([
+			{ nodeId: "a", position: { x: 0, y: 0 } },
+			{ nodeId: "b", position: { x: 0, y: 180 } },
+		]);
+
+		const { result } = renderHook(() => useAutoLayout());
+
+		await act(async () => {
+			await result.current.applyLayout("TB");
+		});
+
+		// Edge handles must be cleared so React Flow auto-routes for the new layout.
+		const edge = useDiagramStore.getState().edges[0];
+		expect(edge.sourceHandle).toBeUndefined();
+		expect(edge.targetHandle).toBeUndefined();
+
+		// The entire layout (moves + handle clears) is a single undo step.
+		expect(useDiagramStore.getState().undoStack).toHaveLength(1);
+		expect(useDiagramStore.getState().undoStack[0].type).toBe("batch");
+	});
+
+	it("does not push a handle-clear op for edges that already have no handles", async () => {
+		useDiagramStore.getState().loadDiagram(
+			"test-id",
+			"Test",
+			[{ id: "a", position: { x: 0, y: 0 }, type: "cloudflareService", data: {} }],
+			// Edge with no sourceHandle/targetHandle (React Flow auto-routed).
+			[{ id: "e1", source: "a", target: "a", type: "data-flow", data: {} }],
+			undefined,
+			1,
+		);
+
+		// Layout moves no nodes (positions unchanged) and has no handle ops to push.
+		mockComputeLayout.mockResolvedValue([{ nodeId: "a", position: { x: 0, y: 0 } }]);
+
+		const { result } = renderHook(() => useAutoLayout());
+
+		await act(async () => {
+			await result.current.applyLayout("TB");
+		});
+
+		// Nothing changed — no undo step should have been pushed.
+		expect(useDiagramStore.getState().undoStack).toHaveLength(0);
+	});
 });

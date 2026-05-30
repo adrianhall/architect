@@ -44,6 +44,24 @@ export type Operation =
 			from: Record<string, unknown>;
 			to: Record<string, unknown>;
 	  }
+	| {
+			/**
+			 * Shallow-merges `to` onto the top-level fields of the target edge.
+			 *
+			 * Used to update structural edge properties such as `sourceHandle` and
+			 * `targetHandle` in a reversible way (e.g. when auto-layout clears
+			 * pinned handles so React Flow can re-route edges freely). Unlike
+			 * `update_edge_data`, which only touches the nested `edge.data` object,
+			 * `update_edge` may change any first-class `Edge` field.
+			 *
+			 * `from` must capture the previous values of every key present in `to`
+			 * so that `reverseOperation` can restore them exactly.
+			 */
+			type: "update_edge";
+			edgeId: string;
+			from: Partial<Edge>;
+			to: Partial<Edge>;
+	  }
 	| { type: "batch"; operations: Operation[] };
 
 /**
@@ -107,6 +125,13 @@ export function reverseOperation(op: Operation): Operation {
 				from: op.to,
 				to: op.from,
 			};
+		case "update_edge":
+			return {
+				type: "update_edge",
+				edgeId: op.edgeId,
+				from: op.to,
+				to: op.from,
+			};
 		case "batch":
 			return {
 				type: "batch",
@@ -164,6 +189,11 @@ export function applyOperation(nodes: Node[], edges: Edge[], op: Operation): { n
 			return {
 				nodes,
 				edges: edges.map((e) => (e.id === op.edgeId ? { ...e, data: { ...e.data, ...op.to } } : e)),
+			};
+		case "update_edge":
+			return {
+				nodes,
+				edges: edges.map((e) => (e.id === op.edgeId ? { ...e, ...op.to } : e)),
 			};
 		case "batch":
 			return op.operations.reduce((state, subOp) => applyOperation(state.nodes, state.edges, subOp), { nodes, edges });

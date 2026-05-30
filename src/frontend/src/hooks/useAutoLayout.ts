@@ -35,17 +35,17 @@ import { computeLayout } from "../workers/elk-layout-logic";
 /**
  * Default node width used when computing ELK layout.
  *
- * Matches the CSS width of the `CloudflareServiceNode` component. Using a
+ * Matches the `w-[120px]` Tailwind class on `CloudflareServiceNode`. Using a
  * fixed constant is the recommended MVP approach; switch to
  * `node.measured?.width` from React Flow's `getNodes()` for a more accurate
  * layout once node measurement is available.
  */
-const DEFAULT_NODE_WIDTH = 160;
+const DEFAULT_NODE_WIDTH = 120;
 
 /**
  * Default node height used when computing ELK layout.
  *
- * Matches the CSS height of the `CloudflareServiceNode` component.
+ * Matches the `h-[100px]` Tailwind class on `CloudflareServiceNode`.
  */
 const DEFAULT_NODE_HEIGHT = 100;
 
@@ -114,8 +114,8 @@ export function useAutoLayout(): UseAutoLayoutResult {
 					direction,
 				);
 
-				// Re-read nodes in case the store changed while ELK was computing.
-				const currentNodes = useDiagramStore.getState().nodes;
+				// Re-read store state in case it changed while ELK was computing.
+				const { nodes: currentNodes, edges: currentEdges } = useDiagramStore.getState();
 
 				// Build move_node ops only for nodes whose position actually changed.
 				const moveOperations = positions
@@ -134,10 +134,26 @@ export function useAutoLayout(): UseAutoLayoutResult {
 					})
 					.filter((op): op is NonNullable<typeof op> => op !== null);
 
-				if (moveOperations.length > 0) {
+				// Build update_edge ops to clear pinned sourceHandle / targetHandle
+				// on every edge that has them. Cleared handles let React Flow
+				// auto-route edges based on the new node positions instead of
+				// routing via the old handles (which produces S-shaped curves when
+				// the layout direction changes, e.g. LR → TB).
+				const edgeClearOperations = currentEdges
+					.filter((e) => e.sourceHandle != null || e.targetHandle != null)
+					.map((e) => ({
+						type: "update_edge" as const,
+						edgeId: e.id,
+						from: { sourceHandle: e.sourceHandle, targetHandle: e.targetHandle },
+						to: { sourceHandle: undefined, targetHandle: undefined },
+					}));
+
+				const allOperations = [...moveOperations, ...edgeClearOperations];
+
+				if (allOperations.length > 0) {
 					useDiagramStore.getState().applyBatchOperation({
 						type: "batch",
-						operations: moveOperations,
+						operations: allOperations,
 					});
 				}
 			} catch (err) {
