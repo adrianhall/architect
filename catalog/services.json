@@ -3,7 +3,7 @@
 		{ "id": "developer-platform", "label": "Developer Platform", "color": "#2563eb" },
 		{ "id": "zero-trust", "label": "Zero Trust", "color": "#16a34a" },
 		{ "id": "cdn-application", "label": "CDN / Application", "color": "#ea580c" },
-		{ "id": "other", "label": "Other", "color": "#6b7280" }
+		{ "id": "other", "label": "Other / External", "color": "#6b7280" }
 	],
 	"services": [
 		{
@@ -221,6 +221,38 @@
 			"category": "cdn-application",
 			"iconPath": "images.svg",
 			"docUrl": "https://developers.cloudflare.com/images/"
+		},
+		{
+			"typeId": "user",
+			"officialName": "User",
+			"shortName": "User",
+			"category": "other",
+			"iconPath": "user.svg",
+			"docUrl": "https://www.cloudflare.com/learning/access-management/what-is-identity-and-access-management/"
+		},
+		{
+			"typeId": "agent",
+			"officialName": "Agent",
+			"shortName": "Agent",
+			"category": "other",
+			"iconPath": "agent.svg",
+			"docUrl": "https://developers.cloudflare.com/agents/"
+		},
+		{
+			"typeId": "cloud",
+			"officialName": "Cloud / External Service",
+			"shortName": "Cloud",
+			"category": "other",
+			"iconPath": "cloud.svg",
+			"docUrl": "https://www.cloudflare.com/network/"
+		},
+		{
+			"typeId": "api",
+			"officialName": "API / HTTP Endpoint",
+			"shortName": "API",
+			"category": "other",
+			"iconPath": "api.svg",
+			"docUrl": "https://developers.cloudflare.com/api/"
 		}
 	],
 	"edgeTypes": [
