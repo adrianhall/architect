@@ -722,3 +722,16 @@ After deploying locally with `npm start`:
 10. Add a label to the edge — verify the label appears on the canvas edge.
 11. Click the empty canvas — verify the properties panel disappears (or shows the "no selection" message).
 12. While a node is selected, click in the label input and press Delete — verify the node is NOT deleted (keyboard guard works).
+
+**Edge creation and visual styles (deferred from ISSUE-14 — requires the palette from ISSUE-15 to place nodes first):**
+
+1. Drag two service nodes onto the canvas. Drag from a handle on one node to a handle on the other — verify a new edge appears with the solid animated-dot style (`data-flow`).
+2. Attempt to drag from a handle back to the same node — verify no edge is created (self-loop rejected silently).
+3. Select an edge and use the properties panel to change its type to each of the four options; verify the visual style changes on the canvas:
+   - **Data Flow**: solid line with an animated dot flowing along the path
+   - **Binding**: dashed line (purple)
+   - **Trigger**: dotted line with an arrowhead (amber)
+   - **Dependency**: thin solid line (light grey)
+4. Click an edge without selecting it first — verify the stroke colour changes to blue (selection indicator).
+5. Click the canvas background to deselect — verify the edge returns to its default colour.
+6. Enable "Reduce Motion" in OS Settings → Accessibility → Display. Reload the editor and open a diagram with a `data-flow` edge — verify the animated dot is **not** present (the edge should be a plain solid line with no moving circle).
