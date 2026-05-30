@@ -88,6 +88,7 @@ function pushOperation(set: SetState, get: GetState, op: Operation): void {
 ```
 
 Key behaviors:
+
 - Appends `op` to `undoStack`.
 - Clears `redoStack` — any new action invalidates redo history.
 - If `undoStack.length > maxUndoSteps`, shifts oldest entries off the front.
@@ -113,6 +114,7 @@ Each mutating action creates an operation, applies it to the state, and calls `p
 - **`updateEdgeData(edgeId, dataUpdates)`** — Captures the current `edge.data` as `from`. Creates `{ type: "update_edge_data", edgeId, from: currentData, to: dataUpdates }`. Applies the merge. Pushes operation.
 
 **Actions that do NOT push operations:**
+
 - `onNodesChange` — React Flow continuous position/selection updates. Not undoable.
 - `onEdgesChange` — React Flow selection updates. Not undoable.
 - `deselectAllNodes` — UI-only state change. Not undoable.
@@ -249,41 +251,41 @@ All tests go in `src/frontend/src/stores/__tests__/diagram-undo-redo.test.ts`.
 
 1. **Undo reverses last action** — Add a node, undo. Verify nodes array is empty. Verify undo stack is empty, redo stack has 1 entry.
 
-2. **Redo re-applies undone action** — Add a node, undo, redo. Verify the node is back. Verify undo stack has 1 entry, redo stack is empty.
+1. **Redo re-applies undone action** — Add a node, undo, redo. Verify the node is back. Verify undo stack has 1 entry, redo stack is empty.
 
-3. **New action clears redo stack** — Add node A, undo, add node B. Verify redo stack is empty, only node B exists, undo stack has 1 entry.
+1. **New action clears redo stack** — Add node A, undo, add node B. Verify redo stack is empty, only node B exists, undo stack has 1 entry.
 
-4. **Undo stack capped at 50** — Push 55 operations. Verify undo stack length is 50. Verify the first 5 operations are lost (cannot be undone).
+1. **Undo stack capped at 50** — Push 55 operations. Verify undo stack length is 50. Verify the first 5 operations are lost (cannot be undone).
 
-5. **canUndo/canRedo reflect stack state** — Initially both false. After an action, canUndo is true. After undo, canRedo is true. After redo, canRedo is false.
+1. **canUndo/canRedo reflect stack state** — Initially both false. After an action, canUndo is true. After undo, canRedo is true. After redo, canRedo is false.
 
-6. **Undo on empty stack is a no-op** — Call undo on initial state. Verify no error, state unchanged.
+1. **Undo on empty stack is a no-op** — Call undo on initial state. Verify no error, state unchanged.
 
-7. **Redo on empty stack is a no-op** — Call redo on initial state. Verify no error, state unchanged.
+1. **Redo on empty stack is a no-op** — Call redo on initial state. Verify no error, state unchanged.
 
-8. **Multiple undos work in sequence** — Perform 3 actions, undo 3 times. Verify state is back to initial.
+1. **Multiple undos work in sequence** — Perform 3 actions, undo 3 times. Verify state is back to initial.
 
 ### Operation-Specific Integration Tests
 
-9. **Undo addNode** — Add a node, undo. Verify the node is removed.
+1. **Undo addNode** — Add a node, undo. Verify the node is removed.
 
-10. **Undo removeNodes restores node AND connected edges** — Add node A, add node B, add edge A→B. Remove node A. Undo. Verify both node A and edge A→B are restored.
+1. **Undo removeNodes restores node AND connected edges** — Add node A, add node B, add edge A→B. Remove node A. Undo. Verify both node A and edge A→B are restored.
 
-11. **Undo moveNode restores original position** — Add a node at (0, 0), call moveNode to (100, 200), undo. Verify node is back at (0, 0).
+1. **Undo moveNode restores original position** — Add a node at (0, 0), call moveNode to (100, 200), undo. Verify node is back at (0, 0).
 
-12. **Undo addEdge** — Add an edge, undo. Verify the edge is removed.
+1. **Undo addEdge** — Add an edge, undo. Verify the edge is removed.
 
-13. **Undo removeEdges** — Add an edge, remove it, undo. Verify the edge is restored.
+1. **Undo removeEdges** — Add an edge, remove it, undo. Verify the edge is restored.
 
-14. **Undo updateNodeData restores original data** — Set a node's label to "Workers", update to "D1", undo. Verify label is "Workers" again.
+1. **Undo updateNodeData restores original data** — Set a node's label to "Workers", update to "D1", undo. Verify label is "Workers" again.
 
-15. **Undo updateEdgeData restores original data** — Set an edge's label to "HTTP", update to "gRPC", undo. Verify label is "HTTP" again.
+1. **Undo updateEdgeData restores original data** — Set an edge's label to "HTTP", update to "gRPC", undo. Verify label is "HTTP" again.
 
-16. **Batch operations undo as a unit** — Remove 3 nodes (which creates a batch operation). Undo once. Verify all 3 nodes and their edges are restored in a single undo step.
+1. **Batch operations undo as a unit** — Remove 3 nodes (which creates a batch operation). Undo once. Verify all 3 nodes and their edges are restored in a single undo step.
 
-17. **setDiagram clears both stacks** — Perform some actions (building undo history), then call setDiagram. Verify both undoStack and redoStack are empty.
+1. **setDiagram clears both stacks** — Perform some actions (building undo history), then call setDiagram. Verify both undoStack and redoStack are empty.
 
-18. **onConnect pushes an add_edge operation** — Call onConnect with valid source/target. Verify an operation was pushed to the undo stack. Undo. Verify the edge is removed.
+1. **onConnect pushes an add_edge operation** — Call onConnect with valid source/target. Verify an operation was pushed to the undo stack. Undo. Verify the edge is removed.
 
 ### Manual Tests
 

@@ -451,7 +451,7 @@ function EdgeStyleIndicator({
       width="32"
       height="16"
       viewBox="0 0 32 16"
-      className="flex-shrink-0"
+      className="shrink-0"
       aria-hidden="true"
     >
       <line
@@ -550,7 +550,7 @@ const hasSelection = selectedNodeId !== null || selectedEdgeId !== null;
 return (
   <div className="flex h-full">
     {/* Palette sidebar (from ISSUE-15) */}
-    <aside className="w-60 flex-shrink-0 border-r bg-background">
+    <aside className="w-60 shrink-0 border-r bg-background">
       <ServicePalette />
     </aside>
 
@@ -570,7 +570,7 @@ return (
 
     {/* Properties panel */}
     {hasSelection && (
-      <aside className="w-72 flex-shrink-0 border-l bg-background">
+      <aside className="w-72 shrink-0 border-l bg-background">
         <PropertiesPanel />
       </aside>
     )}

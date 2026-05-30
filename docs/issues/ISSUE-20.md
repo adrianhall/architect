@@ -229,7 +229,7 @@ export function UserTable({ users, currentUserId, sort, order, onSort }: UserTab
             </TableHead>
           ))}
           <TableHead>Diagrams</TableHead>
-          <TableHead className="w-[80px]">Actions</TableHead>
+          <TableHead className="w-20">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -439,7 +439,7 @@ export function Pagination({ page, totalPages, limit, onPageChange, onLimitChang
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Rows per page</span>
         <Select value={String(limit)} onValueChange={(v) => onLimitChange(Number(v))}>
-          <SelectTrigger className="w-[70px]">
+          <SelectTrigger className="w-17.5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
