@@ -435,3 +435,27 @@ This produced two visible bugs:
 - **EmptyState description**: `max-w-md` = 16px → text wrapped word-by-word and the narrow block centered at the viewport midpoint.
 
 **Resolution:** Removed all `--spacing-{name}` custom tokens from `@theme`. Tailwind v4 uses a single `--spacing` base multiplier (`0.25rem`) with numeric utilities (`p-4` = 1rem, `gap-6` = 1.5rem). Named size tokens (`sm`/`md`/`lg`) belong to the `--container-*` namespace, which Tailwind v4 provides at the correct default values when `--spacing-*` does not shadow them. Added a comment in `app.css` explaining the constraint to prevent reintroduction.
+
+---
+
+## ISSUE-13 — React Flow setup + custom node types + keyboard shortcuts
+
+### Editor route uses `/editor/:id`, not `/diagrams/:id`
+
+**Decision:** The issue spec refers to a route `/diagrams/:id` for the Editor page. The App.tsx router established in ISSUE-10 uses `/editor/:id`. This implementation keeps the existing route path; the issue spec had an error. All `useParams`, link-generation, and test route paths use `/editor/:id`.
+
+### Store is seeded AFTER the API effect runs in Editor tests
+
+**Decision:** The Editor's `useEffect` calls `setDiagram` when the TanStack Query data resolves, which overwrites any Zustand store state set before the component mounts. Tests that require specific store state (selected nodes/edges for keyboard shortcut testing) must seed the store AFTER calling `await waitFor(() => screen.getByTestId("reactflow"))`. A `waitForCanvasAndSeed` helper function encapsulates this pattern.
+
+### `useCatalog` typed as `CatalogData` and `useDiagrams` typed as `DiagramResponse`
+
+**Decision:** The issue spec notes that ISSUE-11's `useCatalog.ts` used a local `CatalogResponse` with `unknown[]` arrays as a temporary typing and that the full typing would be aligned with `CatalogData` once catalog components were implemented. ISSUE-13 is the first issue to consume catalog data on the frontend canvas, so the upgrade to `CatalogData` from `@architect/shared` was applied in this issue. Similarly, `useDiagrams.ts` was updated to use `DiagramResponse` from `@architect/shared` instead of a local `Diagram` interface, since the `graph_data.nodes` and `graph_data.edges` must be `DiagramNode[]` / `DiagramEdge[]` (not `unknown[]`) for the canvas conversion utilities to be type-safe.
+
+### Bundle size warning at build time
+
+**Decision:** The Vite production build emits a warning: "Some chunks are larger than 500 kB after minification." The main bundle is 603 kB minified (192 kB gzipped). This is expected for a canvas-heavy application that bundles React 19, React Flow v12, TanStack Query, Zustand, React Router, and Radix UI in a single chunk. The warning is documented here as a known, accepted state for the MVP. Code splitting via dynamic imports for the Editor route (and separately for the Admin route) should be added as a follow-up issue once core functionality is complete.
+
+### `NodeProps` and test fixture types require double-cast via `unknown`
+
+**Decision:** React Flow v12's `NodeProps` type uses `data: Record<string, unknown>`, which is not directly assignable to/from a strongly-typed interface like `CloudflareServiceNodeData`. Similarly, TypeScript's strict overlap checking rejects single `as X` casts between incompatible types. The pattern `data as unknown as CloudflareServiceNodeData` (and its inverse in tests) is used consistently throughout — this is the standard TypeScript idiom for intentional type assertions between non-overlapping types and is safer than using `any`.

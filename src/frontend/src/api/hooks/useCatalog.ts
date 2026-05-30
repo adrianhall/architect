@@ -1,22 +1,6 @@
+import type { CatalogData } from "@architect/shared";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../client";
-
-/**
- * Shape of the response from `GET /api/catalog`.
- *
- * Full typing will align with `CatalogData` from `@architect/shared` once
- * the frontend catalog components are implemented (ISSUE-15). For now,
- * `unknown[]` accommodates the raw service/category/edge-type objects without
- * requiring consumers to import catalog types they don't yet use.
- */
-interface CatalogResponse {
-	/** All Cloudflare service definitions. */
-	services: unknown[];
-	/** Service category groups. */
-	categories: unknown[];
-	/** Available diagram edge types. */
-	edgeTypes: unknown[];
-}
 
 /**
  * Stable query key for the service catalog.
@@ -34,7 +18,10 @@ export const CATALOG_QUERY_KEY = ["catalog"] as const;
  * on a new deployment; background refetching would waste bandwidth and cause
  * unnecessary re-renders of the service palette.
  *
- * @returns A TanStack Query result containing `CatalogResponse` data,
+ * The returned `CatalogData` includes all services (with icon paths and doc
+ * URLs), categories (with accent colors), and edge type definitions.
+ *
+ * @returns A TanStack Query result containing `CatalogData` data,
  *   loading state, and error state.
  *
  * @example
@@ -47,9 +34,9 @@ export const CATALOG_QUERY_KEY = ["catalog"] as const;
  * ```
  */
 export function useCatalog() {
-	return useQuery<CatalogResponse>({
+	return useQuery<CatalogData>({
 		queryKey: CATALOG_QUERY_KEY,
-		queryFn: () => apiClient<CatalogResponse>("catalog"),
+		queryFn: () => apiClient<CatalogData>("catalog"),
 		staleTime: Number.POSITIVE_INFINITY,
 	});
 }

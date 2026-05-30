@@ -1,33 +1,6 @@
+import type { DiagramResponse } from "@architect/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../client";
-
-/**
- * Diagram as returned by the `/api/diagrams` and `/api/diagrams/:id` endpoints.
- *
- * Uses the API wire format (snake_case properties), which matches the D1
- * column names emitted by the route handler. The frontend graph editor will
- * map these to React Flow node/edge types when rendering the canvas.
- */
-interface Diagram {
-	/** ULID primary key. */
-	id: string;
-	/** ULID of the owning user. */
-	user_id: string;
-	/** Human-readable diagram title (1–80 chars). */
-	title: string;
-	/** Graph payload: nodes, edges, and optional viewport state. */
-	graph_data: {
-		nodes: unknown[];
-		edges: unknown[];
-		viewport?: { x: number; y: number; zoom: number };
-	};
-	/** Optimistic concurrency version; incremented on every PUT. */
-	version: number;
-	/** Unix timestamp (ms) when the diagram was created. */
-	created_at: number;
-	/** Unix timestamp (ms) when the diagram was last updated. */
-	updated_at: number;
-}
 
 /**
  * Stable query key for the complete list of the current user's diagrams.
@@ -54,13 +27,13 @@ export const diagramQueryKey = (id: string) => ["diagrams", id] as const;
  * (create, update, rename, delete, duplicate) invalidate this cache entry
  * on success so the dashboard stays fresh.
  *
- * @returns A TanStack Query result containing `Diagram[]` (or `undefined`
+ * @returns A TanStack Query result containing `DiagramResponse[]` (or `undefined`
  *   while loading) and loading/error state.
  */
 export function useListDiagrams() {
-	return useQuery<Diagram[]>({
+	return useQuery<DiagramResponse[]>({
 		queryKey: DIAGRAMS_QUERY_KEY,
-		queryFn: () => apiClient<Diagram[]>("diagrams"),
+		queryFn: () => apiClient<DiagramResponse[]>("diagrams"),
 	});
 }
 
@@ -71,12 +44,12 @@ export function useListDiagrams() {
  * does not fire on routes that don't have a diagram ID yet.
  *
  * @param id - The ULID of the diagram to fetch.
- * @returns A TanStack Query result containing the `Diagram` data.
+ * @returns A TanStack Query result containing the `DiagramResponse` data.
  */
 export function useDiagram(id: string) {
-	return useQuery<Diagram>({
+	return useQuery<DiagramResponse>({
 		queryKey: diagramQueryKey(id),
-		queryFn: () => apiClient<Diagram>(`diagrams/${id}`),
+		queryFn: () => apiClient<DiagramResponse>(`diagrams/${id}`),
 		enabled: !!id,
 	});
 }
@@ -84,7 +57,7 @@ export function useDiagram(id: string) {
 /**
  * Mutation hook to create a new blank diagram.
  *
- * Returns the newly created `Diagram` object directly from
+ * Returns the newly created `DiagramResponse` object directly from
  * `mutationResult.data` so the caller can navigate to `/editor/:id`
  * immediately after the mutation succeeds.
  *
@@ -105,9 +78,9 @@ export function useDiagram(id: string) {
 export function useCreateDiagram() {
 	const queryClient = useQueryClient();
 
-	return useMutation<Diagram, Error, { title: string }>({
+	return useMutation<DiagramResponse, Error, { title: string }>({
 		mutationFn: ({ title }) =>
-			apiClient<Diagram>("diagrams", {
+			apiClient<DiagramResponse>("diagrams", {
 				method: "POST",
 				body: JSON.stringify({ title }),
 			}),
@@ -132,7 +105,7 @@ export function useUpdateDiagram() {
 	const queryClient = useQueryClient();
 
 	return useMutation<
-		Diagram,
+		DiagramResponse,
 		Error,
 		{
 			id: string;
@@ -142,7 +115,7 @@ export function useUpdateDiagram() {
 		}
 	>({
 		mutationFn: ({ id, ...data }) =>
-			apiClient<Diagram>(`diagrams/${id}`, {
+			apiClient<DiagramResponse>(`diagrams/${id}`, {
 				method: "PUT",
 				body: JSON.stringify(data),
 			}),
@@ -164,9 +137,9 @@ export function useUpdateDiagram() {
 export function useRenameDiagram() {
 	const queryClient = useQueryClient();
 
-	return useMutation<Diagram, Error, { id: string; title: string }>({
+	return useMutation<DiagramResponse, Error, { id: string; title: string }>({
 		mutationFn: ({ id, title }) =>
-			apiClient<Diagram>(`diagrams/${id}`, {
+			apiClient<DiagramResponse>(`diagrams/${id}`, {
 				method: "PATCH",
 				body: JSON.stringify({ title }),
 			}),
@@ -200,9 +173,9 @@ export function useRenameDiagram() {
 export function useDuplicateDiagram() {
 	const queryClient = useQueryClient();
 
-	return useMutation<Diagram, Error, { id: string }>({
+	return useMutation<DiagramResponse, Error, { id: string }>({
 		mutationFn: ({ id }) =>
-			apiClient<Diagram>(`diagrams/${id}/duplicate`, {
+			apiClient<DiagramResponse>(`diagrams/${id}/duplicate`, {
 				method: "POST",
 			}),
 		onSuccess: () => {
