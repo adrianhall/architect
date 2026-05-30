@@ -625,3 +625,25 @@ TypeError: U8 is not a constructor
 ### `getValueOrDefault` utility extracted to `src/shared/src/utils.ts`
 
 **Decision:** lcov branch analysis identified nine call sites in five files where the `??` fallback branch was never reached in tests — all defensive guards against impossible or library-internal states (ELK child coordinates, Map lookups behind a `.has()` filter, route params guaranteed by the router, etc.). Replacing them with the named `getValueOrDefault(value, default)` helper consolidates the coverage burden into a single trivially-testable function in `src/shared`. Project-wide branch coverage improved from 93.14% to 94.87%. Reachable `??` defaults (`user.name ?? user.email`, `category?.color ?? "#6b7280"`) and type-coercion patterns (`errorMessage ?? undefined`) were intentionally left as bare `??` operators.
+
+---
+
+## ISSUE-20 — Admin UI: user management + audit log display + tests
+
+### `AdminUser` and `AdminUsersResponse` exported from `useAdmin.ts`
+
+**Decision:** The issue spec defines `AdminUser` as a local interface in `UserTable.tsx`. Since `UserActions.tsx` also needs the same type, and `useAdmin.ts` is the canonical location for the API wire format, `AdminUser` and `AdminUsersResponse` were exported from `useAdmin.ts` and imported by the components that need them. This avoids type duplication and keeps the single source of truth in the hook file.
+
+### `getQueriesData`/`setQueriesData` for optimistic updates instead of single query key
+
+**Decision:** The issue spec's optimistic update pattern uses `queryClient.getQueryData(["admin", "users"])` and `queryClient.setQueryData(["admin", "users"], ...)` with the bare base key. However, `useAdminUsers` keys its queries as `[...ADMIN_USERS_QUERY_KEY, params]` — a different parameter combination per page/filter is a separate cache entry. Using the bare base key would miss all parameterised cache entries.
+
+**Resolution:** Used `queryClient.getQueriesData<AdminUsersResponse>({ queryKey: ADMIN_USERS_QUERY_KEY })` and `queryClient.setQueriesData<AdminUsersResponse>({ queryKey: ADMIN_USERS_QUERY_KEY }, updater)` which use TanStack Query's prefix-matching to update ALL cached pages simultaneously. The `previousData` returned from `onMutate` is the full array of `[queryKey, data]` pairs so `onError` can restore each individually.
+
+### Pagination rendered conditionally when `totalPages > 1`
+
+**Decision:** The issue spec shows `<Pagination>` always rendered when data is present. Rendering pagination controls for a single-page result (e.g. 2 users out of 20 per page) adds unnecessary visual noise. The pagination is now conditionally rendered only when `data.pagination.totalPages > 1`.
+
+### `onSelect` used on `DropdownMenuItem` instead of `onClick` (AGENTS.md pattern)
+
+**Decision:** Radix DropdownMenu closes its portal on `pointerup` before the native `click` event fires. Following the established pattern from ISSUE-12 and AGENTS.md, all state changes in `UserActions.tsx` are placed in `onSelect` callbacks (not `onClick`). `onClick={(e) => e.stopPropagation()}` is also added to prevent event bubbling to any parent containers.
