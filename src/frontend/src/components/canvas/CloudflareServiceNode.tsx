@@ -79,7 +79,13 @@ function CloudflareServiceNode({ data, selected }: NodeProps) {
 	return (
 		<div
 			className={cn(
-				"flex flex-col items-center rounded-lg border-2 bg-white dark:bg-gray-900",
+				// bg-white is intentional and unconditional — canvas nodes must
+				// always have a white background so icons and labels are legible
+				// regardless of OS dark-mode preference.  The theme does not define
+				// dark-mode overrides, so `dark:bg-gray-900` would apply Tailwind's
+				// built-in #111827 swatch, making the near-black label (#1a1a1a)
+				// invisible against it.
+				"flex flex-col items-center rounded-lg border-2 bg-white",
 				"w-[120px] h-[100px] overflow-hidden transition-shadow",
 				selected && "shadow-lg ring-2 ring-blue-400",
 			)}
@@ -107,8 +113,14 @@ function CloudflareServiceNode({ data, selected }: NodeProps) {
 				/>
 			</div>
 
-			{/* Label area — bottom ~33% of the node */}
-			<div className="w-full truncate px-1 pb-1 text-center text-xs font-medium leading-tight" title={nodeData.label}>
+			{/* Label area — bottom ~33% of the node.
+			    text-gray-900 is explicit so the label is always dark against the
+			    white node background, even when an ancestor carries dark-mode
+			    text-color variables. */}
+			<div
+				className="w-full truncate px-1 pb-1 text-center text-xs font-medium leading-tight text-gray-900"
+				title={nodeData.label}
+			>
 				{nodeData.label}
 			</div>
 		</div>
