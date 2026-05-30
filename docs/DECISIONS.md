@@ -744,3 +744,27 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 ### No deprecated options required `ignoreDeprecations`
 
 **Decision:** All TypeScript 6.0 breaking changes were either already handled by explicit settings in the workspace tsconfigs (`module`, `target`, `moduleResolution`, `esModuleInterop`, `rootDir`) or required only the two `types` additions above. No deprecated options (`baseUrl`, `outFile`, `target: es5`, `module: umd/amd/systemjs`, `moduleResolution: node`, `downlevelIteration`, `module namespace {}`) are present in any tsconfig. No `ignoreDeprecations: "6.0"` escape hatch was needed.
+
+---
+
+## ISSUE-24 — Bundle splitting: vendor chunks + route-level lazy loading
+
+### `vendor-elk` chunk exceeds the 200 kB per-chunk acceptance criterion
+
+**Decision:** The issue spec's acceptance criterion states "no chunk larger than 200 kB (minified, before gzip)." The spec was authored after ISSUE-13 (which identified the 603 kB single-chunk problem) but before ISSUE-19 (which added `elkjs` for auto-layout). `elkjs/lib/elk.bundled.js` is a Java-to-JavaScript transpilation of the Eclipse Layout Kernel and weighs ~1.4 MB minified after Rollup processes it. This size cannot be meaningfully reduced through tree-shaking; the bundled file contains the entire ELK algorithm by design.
+
+**What was done:**
+
+- `elkjs` is explicitly split into its own `vendor-elk` chunk, keeping it clearly identified and separate from all other vendor chunks.
+- Because the Editor page is lazy-loaded via `React.lazy`, `vendor-elk` is only ever downloaded when the user navigates to `/editor/:id` — it is never downloaded for the dashboard, admin, or landing pages.
+- `build.chunkSizeWarningLimit` is raised to `1600` (kB) to suppress the Vite "> 500 kB" warning, which is a false positive for this known-large, editor-only dependency.
+
+**All other named chunks are well within 200 kB:** `vendor-react` (~194 kB), `vendor-ui` (~113 kB), `vendor-flow` (~126 kB), `vendor-query` (~41 kB), `vendor-router` (~37 kB), `vendor-misc` (~91 kB), `vendor-zustand` (~2 kB).
+
+**Resolution:** Accepted limitation. The original ISSUE-19 DECISIONS.md entry already flagged the "correct long-term fix" as "the separate-files approach (`elk-api.js` + `elk-worker.min.js?url`) combined with a dynamic `import()` code split for the Editor route." That refactor remains a post-MVP item.
+
+### `vendor-misc` chunk in addition to the six named chunks
+
+**Decision:** The issue spec lists six specific named chunks (`vendor-react`, `vendor-router`, `vendor-query`, `vendor-ui`, `vendor-flow`, `vendor-zustand`). The build produces an additional `vendor-misc` chunk (~91 kB) that contains transitive dependencies of Radix UI components (`react-remove-scroll`, `react-remove-scroll-bar`, `react-style-singleton`, `use-sidecar`, `aria-hidden`, `get-nonce`). These packages have their own `node_modules/` paths but are not under `@radix-ui/`, so they fall through to the generic catch-all.
+
+**Resolution:** Accepted. The `vendor-misc` chunk is 91 kB — well below the 200 kB limit — and is loaded for routes that use Radix UI components. Adding explicit patterns for every Radix transitive dependency would be brittle (they may change between minor Radix releases). The acceptance criterion requires the six named chunks to exist, not that they be the only chunks.
