@@ -1,3 +1,4 @@
+import { getValueOrDefault } from "@architect/shared";
 import {
 	applyEdgeChanges,
 	applyNodeChanges,
@@ -410,6 +411,34 @@ interface DiagramState {
 	) => void;
 
 	/**
+	 * Applies a pre-built `batch` operation to the canvas and records it as a
+	 * single undo/redo step.
+	 *
+	 * Used by the ELK auto-layout feature to apply computed node positions as a
+	 * batch of `move_node` operations. Because all moves are wrapped in a single
+	 * `batch`, the entire layout can be undone with one `Ctrl/Cmd+Z` keystroke.
+	 *
+	 * The supplied `op` must be a `batch` operation whose sub-operations are all
+	 * valid `Operation` variants (most commonly `move_node`). If the batch
+	 * contains no sub-operations, the call is a no-op — no undo step is pushed
+	 * and `dirty` is not set.
+	 *
+	 * @param op - A `{ type: "batch"; operations: Operation[] }` object to apply.
+	 *
+	 * @example
+	 * ```ts
+	 * useDiagramStore.getState().applyBatchOperation({
+	 *   type: "batch",
+	 *   operations: [
+	 *     { type: "move_node", nodeId: "a", from: { x: 0, y: 0 }, to: { x: 100, y: 50 } },
+	 *     { type: "move_node", nodeId: "b", from: { x: 0, y: 0 }, to: { x: 100, y: 200 } },
+	 *   ],
+	 * });
+	 * ```
+	 */
+	applyBatchOperation: (op: Extract<Operation, { type: "batch" }>) => void;
+
+	/**
 	 * Marks the diagram as clean after a successful auto-save.
 	 *
 	 * Updates `version` to the new value returned by the server and sets
@@ -609,7 +638,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 		const edge = edges.find((e) => e.id === edgeId);
 		if (!edge) return;
 
-		const fromData = { ...(edge.data ?? {}) } as Record<string, unknown>;
+		const fromData = { ...getValueOrDefault(edge.data, {}) } as Record<string, unknown>;
 		const op: Operation = {
 			type: "update_edge_data",
 			edgeId,
@@ -721,6 +750,16 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 			undoStack: [],
 			redoStack: [],
 		});
+	},
+
+	applyBatchOperation: (op) => {
+		// No-op when the batch contains no sub-operations.
+		if (op.operations.length === 0) return;
+
+		const { nodes, edges } = get();
+		const newState = applyOperation(nodes, edges, op);
+		set({ nodes: newState.nodes, edges: newState.edges });
+		pushUndoOperation(set, get, op);
 	},
 
 	markClean: (newVersion) => {

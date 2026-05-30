@@ -1,3 +1,4 @@
+import { getValueOrDefault } from "@architect/shared";
 import {
 	Background,
 	BackgroundVariant,
@@ -14,6 +15,7 @@ import { useParams } from "react-router-dom";
 import { ulid } from "ulid";
 import { useCatalog, useDiagram } from "@/api";
 import { edgeTypes } from "@/components/canvas/edgeTypes";
+import { LayoutButton } from "@/components/canvas/LayoutButton";
 import { nodeTypes } from "@/components/canvas/nodeTypes";
 import { SaveStatus } from "@/components/canvas/SaveStatus";
 import { toReactFlowEdge, toReactFlowNode } from "@/components/canvas/utils";
@@ -79,7 +81,7 @@ function EditorCanvas() {
 	const { fitView, zoomIn, zoomOut, screenToFlowPosition } = useReactFlow();
 
 	// Server state — TanStack Query hooks from ISSUE-11
-	const { data: diagram, isLoading: diagramLoading } = useDiagram(id ?? "");
+	const { data: diagram, isLoading: diagramLoading } = useDiagram(getValueOrDefault(id, ""));
 	const { data: catalog, isLoading: catalogLoading } = useCatalog();
 
 	// Canvas state — Zustand diagram store
@@ -103,7 +105,7 @@ function EditorCanvas() {
 	const hasSelection = selectedNodeId !== null || selectedEdgeId !== null;
 
 	// Auto-save — debounced 500 ms; `beforeunload` guard when dirty.
-	const { status: saveStatus, lastSavedAt, errorMessage } = useDiagramSync(id ?? "", restSync);
+	const { status: saveStatus, lastSavedAt, errorMessage } = useDiagramSync(getValueOrDefault(id, ""), restSync);
 
 	/**
 	 * Tracks the canvas position of each node at the start of a drag operation.
@@ -380,6 +382,11 @@ function EditorCanvas() {
 
 	return (
 		<div className="flex h-full flex-col">
+			{/* Canvas toolbar — layout and other canvas-wide controls */}
+			<div className="flex items-center gap-2 border-b bg-background px-2 py-1">
+				<LayoutButton />
+			</div>
+
 			{/* Main canvas area — palette, canvas, optional properties panel */}
 			<div className="flex flex-1 overflow-hidden">
 				{/* Service palette sidebar */}

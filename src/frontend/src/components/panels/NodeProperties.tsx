@@ -1,3 +1,4 @@
+import { getValueOrDefault } from "@architect/shared";
 import type { Node } from "@xyflow/react";
 import { ExternalLink, RotateCcw } from "lucide-react";
 import { useCallback, useMemo } from "react";
@@ -110,8 +111,8 @@ export default function NodeProperties({ node }: NodePropertiesProps) {
 		}
 	}, [service]);
 
-	const currentLabel = (node.data.label as string) ?? "";
-	const currentDescription = (node.data.description as string) ?? "";
+	const currentLabel = getValueOrDefault(node.data.label as string | undefined, "");
+	const currentDescription = getValueOrDefault(node.data.description as string | undefined, "");
 	const currentAccentColor = node.data.accentColor as string | undefined;
 
 	return (

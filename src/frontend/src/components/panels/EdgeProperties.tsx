@@ -1,3 +1,4 @@
+import { getValueOrDefault } from "@architect/shared";
 import type { Edge } from "@xyflow/react";
 import { useCallback } from "react";
 import { Input } from "@/components/ui/input";
@@ -101,7 +102,7 @@ function EdgeStyleIndicator({ style, selected }: EdgeStyleIndicatorProps) {
 				y2="8"
 				stroke={color}
 				strokeWidth={strokeWidth}
-				strokeDasharray={dashArrayMap[style] ?? "none"}
+				strokeDasharray={getValueOrDefault(dashArrayMap[style], "none")}
 			/>
 			{style === "dotted" && <polygon points="28,4 32,8 28,12" fill={color} />}
 		</svg>

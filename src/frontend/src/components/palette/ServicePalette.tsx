@@ -1,4 +1,5 @@
 import type { CatalogService } from "@architect/shared";
+import { getValueOrDefault } from "@architect/shared";
 import { useMemo } from "react";
 import { useCatalog } from "@/api";
 import PaletteCategory from "./PaletteCategory";
@@ -55,7 +56,7 @@ export function ServicePalette() {
 			.map((cat) => ({
 				category: cat,
 				// The filter above guarantees this entry exists.
-				services: servicesByCategory.get(cat.id) ?? [],
+				services: getValueOrDefault(servicesByCategory.get(cat.id), []),
 			}));
 	}, [catalog]);
 

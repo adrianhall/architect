@@ -73,6 +73,13 @@ export default defineConfig({
 		outDir: "../worker/public",
 		emptyOutDir: true,
 	},
+	// Emit Web Workers as ES modules so that the `elkjs/lib/elk.bundled.js`
+	// import resolves correctly inside the worker bundle. Without this setting,
+	// Vite defaults to IIFE format for workers which does not support ES module
+	// imports inside the worker file.
+	worker: {
+		format: "es",
+	},
 	server: {
 		proxy: {
 			"/api": {
