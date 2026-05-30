@@ -10,6 +10,7 @@ import {
 import { useCallback, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useCatalog, useDiagram } from "@/api";
+import { edgeTypes } from "@/components/canvas/edgeTypes";
 import { nodeTypes } from "@/components/canvas/nodeTypes";
 import { toReactFlowEdge, toReactFlowNode } from "@/components/canvas/utils";
 import { useDiagramStore } from "@/stores/diagram";
@@ -27,6 +28,9 @@ import { useDiagramStore } from "@/stores/diagram";
  *   nodes/edges), `+`/`-` (zoom in/out), `Ctrl+Shift+F` / `Cmd+Shift+F`
  *   (fit view). Shortcuts are suppressed when focus is inside an `<input>`,
  *   `<textarea>`, or a `contenteditable` element.
+ * - Wires the `onConnect` handler from the diagram store so dragging from one
+ *   node handle to another creates a new `data-flow` edge with a ULID id.
+ *   Self-loop connections are silently rejected by the store.
  *
  * @returns The full-page React Flow canvas with controls and minimap, or a
  *   loading indicator while data is in-flight.
@@ -44,6 +48,7 @@ function EditorCanvas() {
 	const edges = useDiagramStore((s) => s.edges);
 	const onNodesChange = useDiagramStore((s) => s.onNodesChange);
 	const onEdgesChange = useDiagramStore((s) => s.onEdgesChange);
+	const onConnect = useDiagramStore((s) => s.onConnect);
 	const setDiagram = useDiagramStore((s) => s.setDiagram);
 	const removeNodes = useDiagramStore((s) => s.removeNodes);
 	const removeEdges = useDiagramStore((s) => s.removeEdges);
@@ -128,11 +133,17 @@ function EditorCanvas() {
 				edges={edges}
 				onNodesChange={onNodesChange}
 				onEdgesChange={onEdgesChange}
+				onConnect={onConnect}
 				nodeTypes={nodeTypes}
+				edgeTypes={edgeTypes}
 				fitView
 				// Disable React Flow's built-in delete handling — our handler
 				// adds a text-input guard that the built-in handler lacks.
 				deleteKeyCode={null}
+				// Default edge options for the connection-line preview while dragging.
+				defaultEdgeOptions={{ type: "data-flow" }}
+				// Visual style of the dragging connection line before it snaps to a handle.
+				connectionLineStyle={{ stroke: "#64748b", strokeWidth: 2 }}
 			>
 				<MiniMap zoomable pannable />
 				<Controls />

@@ -1,4 +1,4 @@
-import type { Edge, EdgeChange, Node, NodeChange } from "@xyflow/react";
+import type { Connection, Edge, EdgeChange, Node, NodeChange } from "@xyflow/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useDiagramStore } from "../diagram";
 
@@ -33,6 +33,9 @@ function makeEdge(id: string, source: string, target: string, overrides: Partial
 		...overrides,
 	};
 }
+
+/** ULID pattern: 26 characters, Crockford Base32 alphabet. */
+const ULID_PATTERN = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
 describe("useDiagramStore", () => {
 	beforeEach(resetStore);
@@ -131,6 +134,176 @@ describe("useDiagramStore", () => {
 
 			expect(useDiagramStore.getState().edges).toHaveLength(1);
 			expect(useDiagramStore.getState().edges[0].id).toBe("e2");
+		});
+	});
+
+	// ── addEdge ────────────────────────────────────────────────────────────────
+
+	describe("addEdge", () => {
+		it("adds an edge to the store", () => {
+			const edge = makeEdge("e1", "n1", "n2");
+			useDiagramStore.getState().addEdge(edge);
+			expect(useDiagramStore.getState().edges).toHaveLength(1);
+			expect(useDiagramStore.getState().edges[0]).toEqual(edge);
+		});
+
+		it("appends edges sequentially", () => {
+			const e1 = makeEdge("e1", "n1", "n2");
+			const e2 = makeEdge("e2", "n2", "n3");
+			useDiagramStore.getState().addEdge(e1);
+			useDiagramStore.getState().addEdge(e2);
+			expect(useDiagramStore.getState().edges).toHaveLength(2);
+			expect(useDiagramStore.getState().edges[1].id).toBe("e2");
+		});
+	});
+
+	// ── updateEdge ─────────────────────────────────────────────────────────────
+
+	describe("updateEdge", () => {
+		it("merges updates onto the existing edge", () => {
+			const edge = makeEdge("e1", "n1", "n2", { type: "data-flow" });
+			useDiagramStore.setState({ edges: [edge] });
+
+			useDiagramStore.getState().updateEdge("e1", { type: "binding" });
+
+			const updated = useDiagramStore.getState().edges[0];
+			expect(updated.type).toBe("binding");
+			// Other fields remain unchanged.
+			expect(updated.source).toBe("n1");
+			expect(updated.target).toBe("n2");
+		});
+
+		it("merges data updates onto the existing edge data", () => {
+			const edge = makeEdge("e1", "n1", "n2");
+			useDiagramStore.setState({ edges: [edge] });
+
+			useDiagramStore.getState().updateEdge("e1", { data: { label: "HTTP" } });
+
+			const updated = useDiagramStore.getState().edges[0];
+			expect(updated.data).toEqual({ label: "HTTP" });
+		});
+
+		it("is a no-op when the edgeId does not exist", () => {
+			const edge = makeEdge("e1", "n1", "n2");
+			useDiagramStore.setState({ edges: [edge] });
+
+			useDiagramStore.getState().updateEdge("nonexistent", { type: "binding" });
+
+			// The existing edge is unchanged.
+			expect(useDiagramStore.getState().edges).toHaveLength(1);
+			expect(useDiagramStore.getState().edges[0].type).toBe("data-flow");
+		});
+
+		it("leaves other edges unchanged when updating one edge", () => {
+			const e1 = makeEdge("e1", "n1", "n2", { type: "data-flow" });
+			const e2 = makeEdge("e2", "n2", "n3", { type: "trigger" });
+			useDiagramStore.setState({ edges: [e1, e2] });
+
+			useDiagramStore.getState().updateEdge("e1", { type: "binding" });
+
+			expect(useDiagramStore.getState().edges[0].type).toBe("binding");
+			expect(useDiagramStore.getState().edges[1].type).toBe("trigger");
+		});
+	});
+
+	// ── onConnect ──────────────────────────────────────────────────────────────
+
+	describe("onConnect", () => {
+		it("creates a data-flow edge between two different nodes", () => {
+			const conn: Connection = {
+				source: "a",
+				target: "b",
+				sourceHandle: "bottom",
+				targetHandle: "top",
+			};
+			useDiagramStore.getState().onConnect(conn);
+
+			const { edges } = useDiagramStore.getState();
+			expect(edges).toHaveLength(1);
+			expect(edges[0].source).toBe("a");
+			expect(edges[0].target).toBe("b");
+			expect(edges[0].type).toBe("data-flow");
+		});
+
+		it("assigns the correct source and target handles", () => {
+			const conn: Connection = {
+				source: "a",
+				target: "b",
+				sourceHandle: "bottom",
+				targetHandle: "top",
+			};
+			useDiagramStore.getState().onConnect(conn);
+
+			const edge = useDiagramStore.getState().edges[0];
+			expect(edge.sourceHandle).toBe("bottom");
+			expect(edge.targetHandle).toBe("top");
+		});
+
+		it("generates a ULID id for new edges", () => {
+			const conn: Connection = { source: "a", target: "b", sourceHandle: null, targetHandle: null };
+			useDiagramStore.getState().onConnect(conn);
+
+			const edge = useDiagramStore.getState().edges[0];
+			expect(edge.id).toMatch(ULID_PATTERN);
+		});
+
+		it("generates unique ULID ids for each new edge", () => {
+			const conn1: Connection = { source: "a", target: "b", sourceHandle: null, targetHandle: null };
+			const conn2: Connection = { source: "b", target: "c", sourceHandle: null, targetHandle: null };
+			useDiagramStore.getState().onConnect(conn1);
+			useDiagramStore.getState().onConnect(conn2);
+
+			const { edges } = useDiagramStore.getState();
+			expect(edges).toHaveLength(2);
+			expect(edges[0].id).not.toBe(edges[1].id);
+			expect(edges[0].id).toMatch(ULID_PATTERN);
+			expect(edges[1].id).toMatch(ULID_PATTERN);
+		});
+
+		it("silently rejects self-loop connections (source === target)", () => {
+			const conn: Connection = {
+				source: "a",
+				target: "a",
+				sourceHandle: null,
+				targetHandle: null,
+			};
+			useDiagramStore.getState().onConnect(conn);
+
+			expect(useDiagramStore.getState().edges).toHaveLength(0);
+		});
+
+		it("does not add any edge when source is null", () => {
+			const conn = {
+				source: null,
+				target: "b",
+				sourceHandle: null,
+				targetHandle: null,
+			} as unknown as Connection;
+			useDiagramStore.getState().onConnect(conn);
+
+			expect(useDiagramStore.getState().edges).toHaveLength(0);
+		});
+
+		it("does not add any edge when target is null", () => {
+			const conn = {
+				source: "a",
+				target: null,
+				sourceHandle: null,
+				targetHandle: null,
+			} as unknown as Connection;
+			useDiagramStore.getState().onConnect(conn);
+
+			expect(useDiagramStore.getState().edges).toHaveLength(0);
+		});
+
+		it("handles null sourceHandle and targetHandle gracefully", () => {
+			const conn: Connection = { source: "a", target: "b", sourceHandle: null, targetHandle: null };
+			useDiagramStore.getState().onConnect(conn);
+
+			const edge = useDiagramStore.getState().edges[0];
+			// null handles should be stored as undefined (consistent with Edge type).
+			expect(edge.sourceHandle).toBeUndefined();
+			expect(edge.targetHandle).toBeUndefined();
 		});
 	});
 

@@ -1,12 +1,14 @@
 import {
 	applyEdgeChanges,
 	applyNodeChanges,
+	type Connection,
 	type Edge,
 	type EdgeChange,
 	type Node,
 	type NodeChange,
 	type Viewport,
 } from "@xyflow/react";
+import { ulid } from "ulid";
 import { create } from "zustand";
 
 /**
@@ -22,10 +24,7 @@ const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
  *
  * Owns all canvas state: nodes, edges, and viewport. Provides React Flow
  * change handlers and imperative mutation actions used by keyboard shortcuts,
- * palette drag-drop, and the auto-save layer.
- *
- * Note: undo/redo is deferred to ISSUE-17; `onConnect` is deferred to
- * ISSUE-14. This store intentionally excludes both for now.
+ * palette drag-drop, connection handling, and the auto-save layer.
  */
 interface DiagramState {
 	/** All nodes currently on the canvas. */
@@ -87,6 +86,57 @@ interface DiagramState {
 	removeEdges: (ids: string[]) => void;
 
 	/**
+	 * Appends a single, fully constructed edge to the canvas.
+	 *
+	 * Unlike `onConnect` (which creates a new edge from a React Flow
+	 * `Connection` object), `addEdge` accepts a pre-built `Edge` and is used
+	 * for programmatic edge insertion — for example, by the undo/redo system
+	 * (ISSUE-17) re-applying a previously deleted edge.
+	 *
+	 * @param edge - A fully constructed React Flow `Edge` to add.
+	 */
+	addEdge: (edge: Edge) => void;
+
+	/**
+	 * Merges partial updates onto an existing edge identified by `edgeId`.
+	 *
+	 * Performs a shallow merge: top-level fields in `updates` overwrite the
+	 * corresponding fields on the existing edge while all other fields remain
+	 * unchanged. Used by the properties panel (ISSUE-16) to change individual
+	 * edge fields such as `type`, `data.label`, or `data.protocol`.
+	 *
+	 * If `edgeId` does not exist in the current edges array the call is a
+	 * no-op — no error is thrown and the edges array is not mutated.
+	 *
+	 * @param edgeId - The `id` of the edge to update.
+	 * @param updates - Partial edge fields to merge onto the existing edge.
+	 *
+	 * @example
+	 * ```ts
+	 * updateEdge("01HX...", { type: "binding", data: { label: "KV" } });
+	 * ```
+	 */
+	updateEdge: (edgeId: string, updates: Partial<Edge>) => void;
+
+	/**
+	 * React Flow connection handler — creates a new `data-flow` edge when the
+	 * user drags from one node handle to another.
+	 *
+	 * Must be passed directly to the `onConnect` prop of `<ReactFlow>`. React
+	 * Flow calls this handler only when a valid connection is completed (i.e.
+	 * the drag ends on a handle, not on empty canvas). The handler performs an
+	 * additional self-loop guard: if `connection.source === connection.target`
+	 * the connection is silently discarded without adding an edge.
+	 *
+	 * New edges always receive a ULID `id` and default to `type: "data-flow"`.
+	 * Users can change the type via the properties panel (ISSUE-16).
+	 *
+	 * @param connection - The `Connection` object emitted by React Flow,
+	 *   containing `source`, `target`, `sourceHandle`, and `targetHandle`.
+	 */
+	onConnect: (connection: Connection) => void;
+
+	/**
 	 * Replaces the entire diagram state with the provided nodes, edges, and
 	 * optional viewport.
 	 *
@@ -111,8 +161,8 @@ interface DiagramState {
  * Zustand store that owns all canvas state for the architecture editor.
  *
  * Provides React Flow-compatible change handlers (`onNodesChange`,
- * `onEdgesChange`) and imperative mutation actions (`addNode`, `removeNodes`,
- * `removeEdges`, `setDiagram`).
+ * `onEdgesChange`, `onConnect`) and imperative mutation actions (`addNode`,
+ * `removeNodes`, `removeEdges`, `addEdge`, `updateEdge`, `setDiagram`).
  *
  * Use selector functions to subscribe to individual slices so that components
  * only re-render when the slice they care about changes:
@@ -152,6 +202,42 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 	removeEdges: (ids) => {
 		const idSet = new Set(ids);
 		set({ edges: get().edges.filter((e) => !idSet.has(e.id)) });
+	},
+
+	addEdge: (edge) => {
+		set({ edges: [...get().edges, edge] });
+	},
+
+	updateEdge: (edgeId, updates) => {
+		set({
+			edges: get().edges.map((e) => (e.id === edgeId ? { ...e, ...updates } : e)),
+		});
+	},
+
+	onConnect: (connection) => {
+		// Silently reject self-loops — a node cannot connect to itself.
+		if (connection.source === connection.target) {
+			return;
+		}
+
+		// Guard against malformed connections with missing source or target.
+		if (!connection.source || !connection.target) {
+			return;
+		}
+
+		const newEdge: Edge = {
+			id: ulid(),
+			source: connection.source,
+			target: connection.target,
+			sourceHandle: connection.sourceHandle ?? undefined,
+			targetHandle: connection.targetHandle ?? undefined,
+			// Default to data-flow per F4-US4. Users can change the type via
+			// the properties panel (ISSUE-16).
+			type: "data-flow",
+			data: {},
+		};
+
+		set({ edges: [...get().edges, newEdge] });
 	},
 
 	setDiagram: (nodes, edges, viewport) => {

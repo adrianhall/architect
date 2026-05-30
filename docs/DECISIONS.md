@@ -459,3 +459,19 @@ This produced two visible bugs:
 ### `NodeProps` and test fixture types require double-cast via `unknown`
 
 **Decision:** React Flow v12's `NodeProps` type uses `data: Record<string, unknown>`, which is not directly assignable to/from a strongly-typed interface like `CloudflareServiceNodeData`. Similarly, TypeScript's strict overlap checking rejects single `as X` casts between incompatible types. The pattern `data as unknown as CloudflareServiceNodeData` (and its inverse in tests) is used consistently throughout — this is the standard TypeScript idiom for intentional type assertions between non-overlapping types and is safer than using `any`.
+
+---
+
+## ISSUE-14 — Custom edge types + connection handling + tests
+
+### `TriggerEdge` uses inline SVG `<defs>` with per-edge marker IDs instead of `MarkerType.ArrowClosed`
+
+**Decision:** The issue spec suggested using `MarkerType.ArrowClosed` from `@xyflow/react` directly as the `markerEnd` prop on `BaseEdge`. However, `BaseEdge.markerEnd` accepts only a `string` (a `url(#id)` reference), not a React Flow marker object. `MarkerType.ArrowClosed` is the string constant `"arrowclosed"` — passing it as `markerEnd` would reference `url(#arrowclosed)` which React Flow only defines globally when an edge in the store has `markerEnd: { type: MarkerType.ArrowClosed }` configured. Since `TriggerEdge` is responsible for its own arrowhead rendering and must change the marker colour to match the selection state (amber vs. blue), a self-contained approach is required.
+
+**Resolution:** `TriggerEdge` renders inline `<defs>` containing two marker definitions keyed by `trigger-arrow-${edgeId}-default` and `trigger-arrow-${edgeId}-selected`. The `markerEnd` string references the currently active marker id. Per-edge IDs prevent marker collision when multiple trigger edges are rendered simultaneously with mixed selection states.
+
+### `useReducedMotion` hook instead of CSS media query for SVG animation
+
+**Decision:** The issue spec discussed using a CSS media query (`@media (prefers-reduced-motion: reduce)`) to suppress the `<animateMotion>` animation on `DataFlowEdge`. However, SVG SMIL animations (`<animateMotion>`, `<animate>`) do not respond to CSS `animation` or `animation-play-state` properties. The CSS approach in the spec would have no effect.
+
+**Resolution:** Implemented a `useReducedMotion` hook that reads `window.matchMedia("(prefers-reduced-motion: reduce)").matches` and subscribes to change events. `DataFlowEdge` conditionally skips rendering the `<circle>/<animateMotion>` elements entirely when reduced motion is active. A comment was added to `app.css` explaining why no CSS media query is present for this case.

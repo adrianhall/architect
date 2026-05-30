@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/*
+ * Reduced-motion note:
+ * SVG <animateMotion> elements do not respond to CSS `animation` or
+ * `animation-play-state` properties. The animated dot on DataFlowEdge edges is
+ * conditionally not rendered at all when the user's OS has "Reduce Motion"
+ * enabled — this is handled in JS via the `useReducedMotion` hook rather than
+ * via a CSS media query. No CSS rule is needed here for that animation.
+ */
+
 @theme {
 	/* Colors — CF brand palette */
 	--color-primary: #f6821f;
