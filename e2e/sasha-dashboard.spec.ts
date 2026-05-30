@@ -104,6 +104,10 @@ test.describe("Sasha: Dashboard", () => {
 	test("delete diagram with confirmation modal removes card", async () => {
 		await page.goto("/");
 		const cards = page.locator("[data-testid='diagram-card']");
+		// Wait for TanStack Query to fetch and render cards before counting —
+		// page.goto() resolves on DOM load, but card rendering requires the API
+		// response which arrives asynchronously after the initial render.
+		await expect(cards.first()).toBeVisible();
 		const initialCount = await cards.count();
 		expect(initialCount).toBeGreaterThan(0);
 

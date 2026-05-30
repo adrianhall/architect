@@ -12,9 +12,17 @@ const TEST_EMAIL = "sasha-canvas@example.com";
 /**
  * E2E tests for the Sasha persona's canvas editing flows.
  *
- * Tests run serially because they accumulate canvas state across tests:
- * - Drag tests add nodes; later tests assume those nodes exist.
- * - The undo test assumes a node was added by a previous drag.
+ * Tests run serially and **share a single page** across all tests. Using a
+ * shared page means:
+ *
+ * - Canvas state (nodes, edges) accumulates across tests without requiring
+ *   the auto-save debounce to flush between tests. If each test opened a
+ *   fresh page, any nodes dragged by the previous test would be lost (because
+ *   the 500 ms auto-save debounce never fires before `afterEach` closes the page).
+ * - The editor URL and Zustand store stay intact for the full test suite run.
+ *
+ * `beforeAll` creates the context, opens the page, creates a diagram, and
+ * navigates to its editor. `afterAll` closes both the page and context.
  *
  * Covers:
  * - F4-US1: Drag service from palette onto canvas — creates a node.
@@ -35,27 +43,18 @@ test.describe("Sasha: Canvas Editing", () => {
 
 	test.beforeAll(async ({ browser }) => {
 		context = await createAuthenticatedContext(browser, TEST_EMAIL);
-		// Create a diagram to work with throughout all canvas tests.
-		const setupPage = await context.newPage();
-		await setupPage.goto("/");
-		await setupPage.getByRole("button", { name: /new diagram/i }).click();
-		await setupPage.waitForURL(/\/editor\//);
-		await setupPage.close();
-	});
-
-	test.beforeEach(async () => {
+		// Single shared page for all canvas tests — keeps in-memory Zustand state
+		// alive across tests so nodes/edges accumulated by earlier tests persist.
 		page = await context.newPage();
-		// Navigate to the most recently created diagram via the dashboard card.
+
+		// Create a diagram and navigate directly to its editor page.
 		await page.goto("/");
-		await page.locator("[data-testid='diagram-card']").first().click();
+		await page.getByRole("button", { name: /new diagram/i }).click();
 		await page.waitForURL(/\/editor\//);
 	});
 
-	test.afterEach(async () => {
-		await page.close();
-	});
-
 	test.afterAll(async () => {
+		await page.close();
 		await context.close();
 	});
 
@@ -88,8 +87,8 @@ test.describe("Sasha: Canvas Editing", () => {
 	});
 
 	test("edit node label in properties panel", async () => {
-		// Select the node.
-		await page.locator(".react-flow__node").first().click();
+		// Ensure the node is still selected (panel is visible).
+		await expect(page.locator("[data-testid='properties-panel']")).toBeVisible();
 
 		// Find the label input inside the properties panel (linked via <Label htmlFor="node-label">).
 		const labelInput = page.locator("[data-testid='properties-panel']").getByRole("textbox", { name: /label/i });
