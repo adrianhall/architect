@@ -520,6 +520,61 @@ This produced two visible bugs:
 
 **Resolution:** Changed to `useRef<Map<string, Position>>`. Refs are always current — mutating `ref.current` takes effect immediately without triggering a re-render. `onNodeDragStop` reads `dragStartPositionsRef.current` and always sees the latest drag start positions. Both `onNodeDragStart` and `onNodeDragStop` can be stable `useCallback` references with empty dependency arrays.
 
+---
+
+## ISSUE-18 — Auto-save via DiagramSync abstraction + save status + tests
+
+### Zustand two-`set` pattern requires corrected subscribe logic in `useDiagramSync`
+
+**Decision:** The spec's `useDiagramStore.subscribe` callback checked two conditions separately:
+1. Whether `nodes`, `edges`, or `title` changed reference (content guard).
+2. Whether `dirty` is `true` (dirty guard).
+
+In practice, every mutating store action (e.g. `addNode`) does TWO consecutive `set` calls:
+- First `set`: updates `nodes` (new array reference) but `dirty` is still `false`.
+- Second `set` (inside `pushUndoOperation`): updates `undoStack` and sets `dirty = true`.
+
+The subscribe callback fires after each `set`. With the spec's logic, the first fire satisfies the content guard but fails the dirty guard (dirty is still false), and the second fire satisfies the dirty guard but fails the content guard (nodes reference is unchanged between the two sets). Neither fire ever arms the debounce timer.
+
+**Resolution:** Changed the subscribe logic to arm the debounce when `dirty` is `true` AND at least one of `{nodes, edges, title, dirty}` changed since the previous notification. Specifically:
+
+```typescript
+if (!state.dirty) return;  // skip when clean
+if (
+  state.nodes === prevState.nodes &&
+  state.edges === prevState.edges &&
+  state.title === prevState.title &&
+  state.dirty === prevState.dirty  // <-- key: include dirty in the change check
+) return;
+// Otherwise arm the 500 ms debounce
+```
+
+This correctly fires when `dirty` transitions from `false → true` (the second `set` in any mutating action), and also fires on subsequent mutations while already dirty (where nodes/edges change but dirty stays true).
+
+### `loadDiagram` replaces `setDiagram` in the Editor hydration effect
+
+**Decision:** The issue spec's `loadDiagram` action carries additional fields (`diagramId`, `title`, `version`) needed by the auto-save layer. The existing `setDiagram` action does not set these fields. Rather than expanding `setDiagram` (which would change its call signature across existing tests), a new `loadDiagram` action was added to the store. The Editor's hydration effect was updated to call `loadDiagram` instead of `setDiagram`.
+
+`setDiagram` is kept for backward-compatible use cases (e.g. tests that only need nodes/edges/viewport hydration), but the Editor always uses `loadDiagram` so the auto-save layer has a fully initialised store.
+
+### `restSync` module-level singleton in `Editor.tsx`
+
+**Decision:** The issue spec shows `const restSync = createRestSync()` as a module-level singleton in `Editor.tsx`. This is correct — creating the sync object inside the component would recreate it on every render, causing `useDiagramSync`'s `useEffect` to re-subscribe to the store unnecessarily (since `sync` is a dependency). The module-level singleton is stateless (no internal mutable state), so sharing it across all `EditorCanvas` renders is safe.
+
+### `vi.advanceTimersByTimeAsync` for async timer callbacks in `useDiagramSync` tests
+
+**Decision:** The `setTimeout` callback in `useDiagramSync` is `async` (it `await sync.save(...)`). With `vi.useFakeTimers()`, calling `vi.advanceTimersByTime(500)` fires the timer but does not await the async callback — the save Promise remains pending. Tests that need to assert on post-save state (status transitions, markClean) must use `vi.advanceTimersByTimeAsync(500)` (available in Vitest 2.0+) inside an `await act(async () => { ... })` block to correctly await the full async execution.
+
+### `vi.clearAllTimers()` instead of `vi.runAllTimers()` in SaveStatus afterEach
+
+**Decision:** The `SaveStatus` component uses `setInterval(tick, 10_000)` to periodically update the relative time display. `vi.runAllTimers()` attempts to run every pending timer to completion, which causes `setInterval` to re-schedule itself indefinitely until the 10,000-timer limit is hit ("Aborting after running 10000 timers, assuming an infinite loop!"). `vi.clearAllTimers()` discards all pending timers without running them, which is the correct teardown for interval-based components in fake-timer tests.
+
+### Bundle size increase noted but accepted
+
+**Decision:** The frontend bundle grew from 603 kB to 629 kB (gzipped: 199 kB) after adding the sync layer and SaveStatus component. This remains within the same order of magnitude as the pre-existing bundle and the known warning documented in ISSUE-13. No action required until code-splitting (dynamic `import()` for the Editor route) is implemented as a separate follow-up issue.
+
+---
+
 ### Edge deduplication in `removeNodes` batch operations
 
 **Decision:** The issue spec describes creating individual `remove_node` operations where "each captures the node object and all edges where the node is source or target." The naive implementation stores every connected edge in each node's `remove_node` operation. When multiple nodes share an edge (e.g. nodes n1→n2→n3 with edges e12 and e23, removing all three), edge e12 would appear in both n1's and n2's operations. Reversing the batch would then restore e12 twice, creating duplicate edges.

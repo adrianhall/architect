@@ -8,6 +8,12 @@ function resetStore() {
 		nodes: [],
 		edges: [],
 		viewport: { x: 0, y: 0, zoom: 1 },
+		diagramId: null,
+		title: "",
+		version: 1,
+		dirty: false,
+		undoStack: [],
+		redoStack: [],
 	});
 }
 
@@ -509,6 +515,143 @@ describe("useDiagramStore", () => {
 			useDiagramStore.getState().onEdgesChange([change]);
 
 			expect(useDiagramStore.getState().edges[0].selected).toBe(true);
+		});
+	});
+
+	// ── dirty flag ─────────────────────────────────────────────────────────────
+
+	describe("dirty flag", () => {
+		it("is false initially", () => {
+			expect(useDiagramStore.getState().dirty).toBe(false);
+		});
+
+		it("becomes true after addNode", () => {
+			useDiagramStore.getState().addNode(makeNode("n1"));
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("becomes true after removeNodes", () => {
+			useDiagramStore.setState({ nodes: [makeNode("n1")] });
+			useDiagramStore.getState().removeNodes(["n1"]);
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("becomes true after removeEdges", () => {
+			const n1 = makeNode("n1");
+			const n2 = makeNode("n2");
+			useDiagramStore.setState({
+				nodes: [n1, n2],
+				edges: [makeEdge("e1", "n1", "n2")],
+			});
+			useDiagramStore.getState().removeEdges(["e1"]);
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("becomes true after addEdge", () => {
+			useDiagramStore.getState().addEdge(makeEdge("e1", "n1", "n2"));
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("becomes true after updateNodeData", () => {
+			useDiagramStore.setState({ nodes: [makeNode("n1")] });
+			useDiagramStore.getState().updateNodeData("n1", { label: "Updated" });
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("becomes true after updateEdgeData", () => {
+			useDiagramStore.setState({ edges: [makeEdge("e1", "n1", "n2")] });
+			useDiagramStore.getState().updateEdgeData("e1", { label: "Updated" });
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("becomes true after undo", () => {
+			// Set up a recorded operation
+			useDiagramStore.getState().addNode(makeNode("n1"));
+			// markClean to reset dirty
+			useDiagramStore.getState().markClean(2);
+			expect(useDiagramStore.getState().dirty).toBe(false);
+			// Undo should re-dirty
+			useDiagramStore.getState().undo();
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("becomes true after redo", () => {
+			useDiagramStore.getState().addNode(makeNode("n1"));
+			useDiagramStore.getState().undo();
+			// markClean after undo to reset dirty for the redo test
+			useDiagramStore.getState().markClean(1);
+			expect(useDiagramStore.getState().dirty).toBe(false);
+			useDiagramStore.getState().redo();
+			expect(useDiagramStore.getState().dirty).toBe(true);
+		});
+
+		it("is false after loadDiagram", () => {
+			useDiagramStore.getState().addNode(makeNode("n1")); // dirty = true
+			useDiagramStore.getState().loadDiagram("id", "Title", [], [], undefined, 1);
+			expect(useDiagramStore.getState().dirty).toBe(false);
+		});
+	});
+
+	// ── loadDiagram ────────────────────────────────────────────────────────────
+
+	describe("loadDiagram", () => {
+		it("sets diagramId, title, version, nodes, edges, viewport", () => {
+			const nodes = [makeNode("n1")];
+			const edges = [makeEdge("e1", "n1", "n2")];
+			const viewport = { x: 10, y: 20, zoom: 1.5 };
+
+			useDiagramStore.getState().loadDiagram("diag-01", "My Diagram", nodes, edges, viewport, 5);
+
+			const state = useDiagramStore.getState();
+			expect(state.diagramId).toBe("diag-01");
+			expect(state.title).toBe("My Diagram");
+			expect(state.version).toBe(5);
+			expect(state.nodes).toHaveLength(1);
+			expect(state.edges).toHaveLength(1);
+			expect(state.viewport).toEqual(viewport);
+		});
+
+		it("uses DEFAULT_VIEWPORT when undefined is passed", () => {
+			useDiagramStore.getState().loadDiagram("id", "Title", [], [], undefined, 1);
+			expect(useDiagramStore.getState().viewport).toEqual({ x: 0, y: 0, zoom: 1 });
+		});
+
+		it("clears undo and redo stacks", () => {
+			useDiagramStore.getState().addNode(makeNode("n1")); // adds to undo stack
+			useDiagramStore.getState().loadDiagram("id", "Title", [], [], undefined, 1);
+
+			const { undoStack, redoStack } = useDiagramStore.getState();
+			expect(undoStack).toHaveLength(0);
+			expect(redoStack).toHaveLength(0);
+		});
+
+		it("sets dirty to false", () => {
+			useDiagramStore.getState().addNode(makeNode("n1")); // dirty = true
+			useDiagramStore.getState().loadDiagram("id", "Title", [], [], undefined, 1);
+			expect(useDiagramStore.getState().dirty).toBe(false);
+		});
+	});
+
+	// ── markClean ──────────────────────────────────────────────────────────────
+
+	describe("markClean", () => {
+		it("sets dirty to false", () => {
+			useDiagramStore.getState().addNode(makeNode("n1")); // dirty = true
+			useDiagramStore.getState().markClean(2);
+			expect(useDiagramStore.getState().dirty).toBe(false);
+		});
+
+		it("updates the version to the provided value", () => {
+			useDiagramStore.setState({ version: 1 });
+			useDiagramStore.getState().markClean(42);
+			expect(useDiagramStore.getState().version).toBe(42);
+		});
+
+		it("does not affect nodes or edges", () => {
+			const nodes = [makeNode("n1")];
+			useDiagramStore.setState({ nodes });
+			useDiagramStore.getState().markClean(3);
+			expect(useDiagramStore.getState().nodes).toHaveLength(1);
 		});
 	});
 });

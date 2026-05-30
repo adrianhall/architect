@@ -32,10 +32,11 @@ const DEFAULT_MAX_UNDO_STEPS = 50;
 /**
  * Shape of the Zustand diagram store.
  *
- * Owns all canvas state: nodes, edges, viewport, and undo/redo history.
- * Provides React Flow change handlers and imperative mutation actions used
- * by keyboard shortcuts, palette drag-drop, connection handling, and the
- * auto-save layer.
+ * Owns all canvas state: nodes, edges, viewport, undo/redo history, and
+ * auto-save metadata (`dirty`, `version`, `diagramId`, `title`). The
+ * auto-save layer reads `dirty`, `version`, `title`, and the canvas data
+ * to build the PUT request body; `markClean` is called after a successful
+ * save to update the version and clear the dirty flag.
  */
 interface DiagramState {
 	/** All nodes currently on the canvas. */
@@ -44,6 +45,45 @@ interface DiagramState {
 	edges: Edge[];
 	/** Current viewport — pan offset and zoom level. */
 	viewport: Viewport;
+
+	/**
+	 * The ULID of the diagram currently loaded in the editor.
+	 *
+	 * `null` when no diagram has been loaded yet (e.g. before the API
+	 * response arrives on first mount).
+	 */
+	diagramId: string | null;
+
+	/**
+	 * Current diagram title.
+	 *
+	 * Tracked here so the auto-save layer can include it in PUT requests
+	 * without needing to read from a separate TanStack Query cache.
+	 * Initialised to `""` and set to the API value by `loadDiagram`.
+	 */
+	title: string;
+
+	/**
+	 * Optimistic concurrency version number.
+	 *
+	 * Mirrors the `version` column in the `diagrams` table. Sent with every
+	 * PUT request; the server returns 409 if the stored version differs.
+	 * Updated to the server's new value by `markClean`.
+	 */
+	version: number;
+
+	/**
+	 * Whether the canvas has unsaved changes.
+	 *
+	 * Set to `true` by every mutating action (add, remove, move, update,
+	 * undo, redo). Reset to `false` by `loadDiagram` (initial load) and
+	 * `markClean` (after a successful auto-save).
+	 *
+	 * Used by the auto-save hook to skip the debounce when there are no
+	 * pending changes, and by the `beforeunload` guard to warn users before
+	 * they navigate away with unsaved work.
+	 */
+	dirty: boolean;
 
 	/**
 	 * History stack for undo operations. The last entry is the most recently
@@ -336,21 +376,73 @@ interface DiagramState {
 	 * ```
 	 */
 	setDiagram: (nodes: Node[], edges: Edge[], viewport?: Viewport) => void;
+
+	/**
+	 * Fully initialises the store from an API `DiagramResponse`.
+	 *
+	 * Sets `diagramId`, `title`, `version`, `nodes`, `edges`, `viewport`, and
+	 * resets both undo/redo stacks. Crucially, sets `dirty = false` so the
+	 * auto-save layer treats the just-loaded state as clean and does not
+	 * immediately schedule a spurious save.
+	 *
+	 * Call this once in the Editor's data-load effect when both the diagram
+	 * and catalog have finished loading, replacing the old `setDiagram` call.
+	 *
+	 * @param id - The ULID of the loaded diagram.
+	 * @param title - The diagram's display title.
+	 * @param nodes - React Flow `Node[]` converted from the API's `graph_data.nodes`.
+	 * @param edges - React Flow `Edge[]` converted from the API's `graph_data.edges`.
+	 * @param viewport - Optional viewport; defaults to `DEFAULT_VIEWPORT`.
+	 * @param version - The server-side version number for optimistic concurrency.
+	 *
+	 * @example
+	 * ```ts
+	 * useDiagramStore.getState().loadDiagram(id, diagram.title, rfNodes, rfEdges, diagram.graph_data.viewport, diagram.version);
+	 * ```
+	 */
+	loadDiagram: (
+		id: string,
+		title: string,
+		nodes: Node[],
+		edges: Edge[],
+		viewport: Viewport | undefined,
+		version: number,
+	) => void;
+
+	/**
+	 * Marks the diagram as clean after a successful auto-save.
+	 *
+	 * Updates `version` to the new value returned by the server and sets
+	 * `dirty = false`. The auto-save hook calls this immediately after
+	 * receiving a `{ success: true }` `SaveResult`.
+	 *
+	 * @param newVersion - The new version number returned by the server's PUT response.
+	 *
+	 * @example
+	 * ```ts
+	 * const result = await sync.save(diagramId, title, graphData, version);
+	 * if (result.success) {
+	 *   useDiagramStore.getState().markClean(result.version);
+	 * }
+	 * ```
+	 */
+	markClean: (newVersion: number) => void;
 }
 
 /**
- * Appends an operation to the undo stack, enforces the stack size cap, and
- * clears the redo stack.
+ * Appends an operation to the undo stack, enforces the stack size cap,
+ * clears the redo stack, and marks the diagram as dirty.
  *
  * This function is intentionally NOT part of the public `DiagramState`
  * interface — it is an internal helper called by every mutating action. It
- * encapsulates the three invariants that must hold after any user-initiated
+ * encapsulates the four invariants that must hold after any user-initiated
  * change:
  *
  * 1. The new operation is recorded at the top of the undo stack.
  * 2. Any redo history is invalidated (new action breaks the redo branch).
  * 3. The undo stack never exceeds `maxUndoSteps`; the oldest entry is
  *    dropped when the limit is exceeded.
+ * 4. `dirty` is set to `true` so the auto-save layer knows a save is needed.
  *
  * @param set - Zustand `set` function for updating store state.
  * @param get - Zustand `get` function for reading current store state.
@@ -367,7 +459,7 @@ function pushUndoOperation(
 	if (newStack.length > maxUndoSteps) {
 		newStack.splice(0, newStack.length - maxUndoSteps);
 	}
-	set({ undoStack: newStack, redoStack: [] });
+	set({ undoStack: newStack, redoStack: [], dirty: true });
 }
 
 /**
@@ -396,6 +488,10 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 	nodes: [],
 	edges: [],
 	viewport: DEFAULT_VIEWPORT,
+	diagramId: null,
+	title: "",
+	version: 1,
+	dirty: false,
 	undoStack: [],
 	redoStack: [],
 	maxUndoSteps: DEFAULT_MAX_UNDO_STEPS,
@@ -579,6 +675,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 			edges: newState.edges,
 			undoStack: undoStack.slice(0, -1),
 			redoStack: [...redoStack, lastOp],
+			dirty: true,
 		});
 	},
 
@@ -594,6 +691,7 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 			edges: newState.edges,
 			undoStack: [...undoStack, lastOp],
 			redoStack: redoStack.slice(0, -1),
+			dirty: true,
 		});
 	},
 
@@ -609,5 +707,23 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 			undoStack: [],
 			redoStack: [],
 		});
+	},
+
+	loadDiagram: (id, title, nodes, edges, viewport, version) => {
+		set({
+			diagramId: id,
+			title,
+			nodes,
+			edges,
+			viewport: viewport ?? DEFAULT_VIEWPORT,
+			version,
+			dirty: false,
+			undoStack: [],
+			redoStack: [],
+		});
+	},
+
+	markClean: (newVersion) => {
+		set({ dirty: false, version: newVersion });
 	},
 }));

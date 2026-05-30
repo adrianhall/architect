@@ -15,12 +15,25 @@ import { ulid } from "ulid";
 import { useCatalog, useDiagram } from "@/api";
 import { edgeTypes } from "@/components/canvas/edgeTypes";
 import { nodeTypes } from "@/components/canvas/nodeTypes";
+import { SaveStatus } from "@/components/canvas/SaveStatus";
 import { toReactFlowEdge, toReactFlowNode } from "@/components/canvas/utils";
 import { ServicePalette } from "@/components/palette/ServicePalette";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import { useDiagramStore } from "@/stores/diagram";
 import type { Position } from "@/stores/operations";
 import { useUIStore } from "@/stores/ui";
+import { createRestSync } from "@/sync/restSync";
+import { useDiagramSync } from "@/sync/useDiagramSync";
+
+/**
+ * Module-level singleton `DiagramSync` instance.
+ *
+ * Created once — not inside `EditorCanvas` — so it is never recreated on
+ * re-renders (which would cause the `useDiagramSync` effect to re-subscribe
+ * unnecessarily). The REST implementation is stateless, so sharing a single
+ * instance across all renders is safe.
+ */
+const restSync = createRestSync();
 
 /**
  * Inner canvas component — must be a child of `<ReactFlowProvider>` so that
@@ -28,7 +41,12 @@ import { useUIStore } from "@/stores/ui";
  *
  * Responsibilities:
  * - Fetches the diagram and service catalog from the API on mount.
- * - Hydrates the Zustand diagram store when both datasets arrive.
+ * - Hydrates the Zustand diagram store (including `diagramId`, `title`, and
+ *   `version`) when both datasets arrive via `loadDiagram`.
+ * - Mounts `useDiagramSync` to auto-save changes through the `DiagramSync`
+ *   abstraction (debounced 500 ms PUT requests via `RestSync`).
+ * - Renders `<SaveStatus>` in a bottom status bar showing the current
+ *   save state.
  * - Renders `<ReactFlow>` with `<MiniMap>`, `<Controls>`, and a dotted
  *   `<Background>` grid.
  * - Attaches global keyboard shortcuts:
@@ -70,7 +88,7 @@ function EditorCanvas() {
 	const onNodesChange = useDiagramStore((s) => s.onNodesChange);
 	const onEdgesChange = useDiagramStore((s) => s.onEdgesChange);
 	const onConnect = useDiagramStore((s) => s.onConnect);
-	const setDiagram = useDiagramStore((s) => s.setDiagram);
+	const loadDiagram = useDiagramStore((s) => s.loadDiagram);
 	const removeNodes = useDiagramStore((s) => s.removeNodes);
 	const removeEdges = useDiagramStore((s) => s.removeEdges);
 	const addNode = useDiagramStore((s) => s.addNode);
@@ -84,6 +102,9 @@ function EditorCanvas() {
 	// Show the panel only when exactly one element is selected.
 	const hasSelection = selectedNodeId !== null || selectedEdgeId !== null;
 
+	// Auto-save — debounced 500 ms; `beforeunload` guard when dirty.
+	const { status: saveStatus, lastSavedAt, errorMessage } = useDiagramSync(id ?? "", restSync);
+
 	/**
 	 * Tracks the canvas position of each node at the start of a drag operation.
 	 * Keyed by node ID. Cleared per-node on drag stop.
@@ -96,13 +117,15 @@ function EditorCanvas() {
 	const dragStartPositionsRef = useRef<Map<string, Position>>(new Map());
 
 	// Hydrate the Zustand store when both the diagram and catalog have loaded.
+	// Uses `loadDiagram` (instead of the old `setDiagram`) so that
+	// `diagramId`, `title`, and `version` are also initialised for auto-save.
 	useEffect(() => {
 		if (diagram && catalog) {
 			const rfNodes = diagram.graph_data.nodes.map((n) => toReactFlowNode(n, catalog));
 			const rfEdges = diagram.graph_data.edges.map((e) => toReactFlowEdge(e));
-			setDiagram(rfNodes, rfEdges, diagram.graph_data.viewport);
+			loadDiagram(diagram.id, diagram.title, rfNodes, rfEdges, diagram.graph_data.viewport, diagram.version);
 		}
-	}, [diagram, catalog, setDiagram]);
+	}, [diagram, catalog, loadDiagram]);
 
 	/**
 	 * Global keyboard shortcut handler.
@@ -356,59 +379,72 @@ function EditorCanvas() {
 	}
 
 	return (
-		<div className="flex h-full">
-			{/* Service palette sidebar */}
-			<aside className="w-60 shrink-0 border-r bg-background">
-				<ServicePalette />
-			</aside>
+		<div className="flex h-full flex-col">
+			{/* Main canvas area — palette, canvas, optional properties panel */}
+			<div className="flex flex-1 overflow-hidden">
+				{/* Service palette sidebar */}
+				<aside className="w-60 shrink-0 border-r bg-background">
+					<ServicePalette />
+				</aside>
 
-			{/* React Flow canvas — flex-1 takes remaining space after palette and panel */}
-			<div className="flex-1">
-				<ReactFlow
-					nodes={nodes}
-					edges={edges}
-					onNodesChange={onNodesChange}
-					onEdgesChange={onEdgesChange}
-					onConnect={onConnect}
-					nodeTypes={nodeTypes}
-					edgeTypes={edgeTypes}
-					onDrop={handleDrop}
-					onDragOver={handleDragOver}
-					onSelectionChange={handleSelectionChange}
-					onPaneClick={handlePaneClick}
-					onNodeDragStart={onNodeDragStart}
-					onNodeDragStop={onNodeDragStop}
-					// fitView is intentionally omitted.  React Flow defers fitView
-					// when the node array is empty on mount, then fires it the moment
-					// the first node appears — zooming the canvas all the way into that
-					// single node.  Subsequent drops are unaffected because fitView
-					// only triggers once per component lifecycle.  The keyboard shortcut
-					// Ctrl+Shift+F (calls fitView() from useReactFlow) is the explicit
-					// way to fit the viewport; the prop is not needed for that.
-					// Disable React Flow's built-in delete handling — our handler
-					// adds a text-input guard that the built-in handler lacks.
-					deleteKeyCode={null}
-					// Default edge options for the connection-line preview while dragging.
-					defaultEdgeOptions={{ type: "data-flow" }}
-					// Visual style of the dragging connection line before it snaps to a handle.
-					connectionLineStyle={{ stroke: "#64748b", strokeWidth: 2 }}
-					// Hide the "React Flow" attribution link. CF-Architect is an internal
-					// tool and is not a commercial product; removing the attribution is
-					// permitted under the React Flow open-source license terms.
-					proOptions={{ hideAttribution: true }}
-				>
-					<MiniMap zoomable pannable />
-					<Controls />
-					<Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-				</ReactFlow>
+				{/* React Flow canvas — flex-1 takes remaining space after palette and panel */}
+				<div className="flex-1">
+					<ReactFlow
+						nodes={nodes}
+						edges={edges}
+						onNodesChange={onNodesChange}
+						onEdgesChange={onEdgesChange}
+						onConnect={onConnect}
+						nodeTypes={nodeTypes}
+						edgeTypes={edgeTypes}
+						onDrop={handleDrop}
+						onDragOver={handleDragOver}
+						onSelectionChange={handleSelectionChange}
+						onPaneClick={handlePaneClick}
+						onNodeDragStart={onNodeDragStart}
+						onNodeDragStop={onNodeDragStop}
+						// fitView is intentionally omitted.  React Flow defers fitView
+						// when the node array is empty on mount, then fires it the moment
+						// the first node appears — zooming the canvas all the way into that
+						// single node.  Subsequent drops are unaffected because fitView
+						// only triggers once per component lifecycle.  The keyboard shortcut
+						// Ctrl+Shift+F (calls fitView() from useReactFlow) is the explicit
+						// way to fit the viewport; the prop is not needed for that.
+						// Disable React Flow's built-in delete handling — our handler
+						// adds a text-input guard that the built-in handler lacks.
+						deleteKeyCode={null}
+						// Default edge options for the connection-line preview while dragging.
+						defaultEdgeOptions={{ type: "data-flow" }}
+						// Visual style of the dragging connection line before it snaps to a handle.
+						connectionLineStyle={{ stroke: "#64748b", strokeWidth: 2 }}
+						// Hide the "React Flow" attribution link. CF-Architect is an internal
+						// tool and is not a commercial product; removing the attribution is
+						// permitted under the React Flow open-source license terms.
+						proOptions={{ hideAttribution: true }}
+					>
+						<MiniMap zoomable pannable />
+						<Controls />
+						<Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+					</ReactFlow>
+				</div>
+
+				{/* Properties panel — shown only when a node or edge is selected */}
+				{hasSelection && (
+					<aside className="w-72 shrink-0 border-l bg-background">
+						<PropertiesPanel />
+					</aside>
+				)}
 			</div>
 
-			{/* Properties panel — shown only when a node or edge is selected */}
-			{hasSelection && (
-				<aside className="w-72 shrink-0 border-l bg-background">
-					<PropertiesPanel />
-				</aside>
-			)}
+			{/* Status bar — always visible at the bottom of the editor */}
+			<div className="flex items-center justify-between border-t bg-background px-4 py-1">
+				<SaveStatus
+					status={saveStatus}
+					lastSavedAt={lastSavedAt}
+					errorMessage={errorMessage}
+					onReload={() => window.location.reload()}
+				/>
+			</div>
 		</div>
 	);
 }
@@ -421,7 +457,12 @@ function EditorCanvas() {
  * context. The provider must be a parent — not a sibling — of the component
  * that calls `useReactFlow()`.
  *
- * The page layout is a horizontal flex container:
+ * The page layout is a vertical flex container:
+ * - Top: a horizontal area with palette sidebar, canvas, and optional
+ *   properties panel.
+ * - Bottom: a status bar showing the current auto-save state (`SaveStatus`).
+ *
+ * The canvas area is:
  * - Left: a 240 px service palette sidebar listing all Cloudflare services
  *   grouped by category.
  * - Center: the full React Flow canvas with minimap, controls, background grid,
@@ -432,8 +473,8 @@ function EditorCanvas() {
  *
  * Route: `/editor/:id` (requires authentication via `ProtectedRoute`).
  *
- * @returns The editor page with a palette sidebar and full-page React Flow
- *   canvas.
+ * @returns The editor page with a palette sidebar, full-page React Flow
+ *   canvas, and status bar.
  *
  * @example
  * ```tsx
