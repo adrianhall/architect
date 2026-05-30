@@ -475,3 +475,37 @@ This produced two visible bugs:
 **Decision:** The issue spec discussed using a CSS media query (`@media (prefers-reduced-motion: reduce)`) to suppress the `<animateMotion>` animation on `DataFlowEdge`. However, SVG SMIL animations (`<animateMotion>`, `<animate>`) do not respond to CSS `animation` or `animation-play-state` properties. The CSS approach in the spec would have no effect.
 
 **Resolution:** Implemented a `useReducedMotion` hook that reads `window.matchMedia("(prefers-reduced-motion: reduce)").matches` and subscribes to change events. `DataFlowEdge` conditionally skips rendering the `<circle>/<animateMotion>` elements entirely when reduced motion is active. A comment was added to `app.css` explaining why no CSS media query is present for this case.
+
+---
+
+## ISSUE-15 — Service palette: categories, collapse, drag-drop + tests
+
+### `PaletteItem` rendered as `<button>` instead of `<div>`
+
+**Decision:** The issue spec uses a plain `<div draggable onDragStart={...}>` for the palette item. Biome's `noStaticElementInteractions` accessibility rule rejects interactive event handlers (including `onDragStart`) on non-semantic elements without an appropriate ARIA role or semantic element.
+
+**Resolution:** Changed `PaletteItem` to render as a `<button type="button" draggable>`. This satisfies the accessibility linting rule (buttons are natively interactive), makes the item keyboard-focusable, and does not change the visible drag-and-drop behavior. The `DragEvent` type parameter was updated from `HTMLDivElement` to `HTMLButtonElement`. All tests were updated to use `screen.getByRole("button")` where applicable.
+
+### `PaletteCategory` collapsible region uses `<section>` instead of `<div role="region">`
+
+**Decision:** The issue spec uses `<div role="region">` for the collapsible service list. Biome's `useSemanticElements` accessibility rule requires using semantic HTML elements (`<section>`) instead of adding `role="region"` to a generic `<div>`.
+
+**Resolution:** The service list container was changed to `<section aria-label="...">`, which is the semantic equivalent of `<div role="region">` and removes the need for the explicit `role` attribute. The `aria-label` attribute is retained for screen reader identification.
+
+### `ServicePalette` exported as a named export
+
+**Decision:** The issue spec shows `export default function ServicePalette()`. The `Editor.tsx` import was written as a named import (`import { ServicePalette } from "..."`) to be consistent with how other non-default exports work in the project. Named exports make it easier to add sibling exports (e.g. a loading skeleton) later without refactoring the import statement.
+
+**Resolution:** `ServicePalette` uses `export function ServicePalette()` (named export). The import in `Editor.tsx` uses the named destructuring form.
+
+### `PaletteCategory` test uses name-based selector for toggle button
+
+**Decision:** Because `PaletteItem` renders as a `<button>`, `screen.getByRole("button")` inside `PaletteCategory` tests finds multiple buttons (one toggle + two service items). The tests needed a disambiguating selector.
+
+**Resolution:** A `getToggleButton()` helper uses `screen.getByRole("button", { name: /developer platform/i })` to find specifically the category header button by its accessible label. This is more robust than a positional index query and aligns with testing-library best practices (querying by accessible name).
+
+### `EditorDrop.test.tsx` uses captured handler pattern for selection tests
+
+**Decision:** Testing `handleNodeClick`, `handleEdgeClick`, and `handlePaneClick` requires triggering React Flow's `onNodeClick`, `onEdgeClick`, and `onPaneClick` callbacks, which are passed as props to the `<ReactFlow>` component. Since the `@xyflow/react` mock replaces `<ReactFlow>` with a simple `<div>`, firing synthetic events on the div would not reach the handlers (React Flow normally invokes them in response to its own internal hit-testing, not native DOM events).
+
+**Resolution:** The `EditorDrop.test.tsx` mock captures the callback props in a module-level `capturedHandlers` object each time the mock component renders. Tests call these captured handlers directly (e.g. `capturedHandlers.onNodeClick?.({} as React.MouseEvent, { id: "node-abc" })`) to exercise the logic without needing to simulate internal React Flow behavior.
