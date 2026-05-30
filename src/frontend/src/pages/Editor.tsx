@@ -40,8 +40,9 @@ import { useUIStore } from "@/stores/ui";
  * - Provides `onDrop` / `onDragOver` handlers so that services dragged from
  *   the palette sidebar are placed on the canvas as new nodes at the cursor
  *   position.
- * - Tracks the selected node and edge in the `useUIStore` so that the
- *   properties panel (ISSUE-16) receives the correct item to display.
+ * - Uses `onSelectionChange` (not separate `onNodeClick`/`onEdgeClick`) so
+ *   that multi-select is detected correctly: the properties panel is only shown
+ *   when exactly one node or one edge is selected.
  *
  * @returns The full-page React Flow canvas with controls and minimap, or a
  *   loading indicator while data is in-flight.
@@ -71,6 +72,7 @@ function EditorCanvas() {
 	const clearSelection = useUIStore((s) => s.clearSelection);
 	const selectedNodeId = useUIStore((s) => s.selectedNodeId);
 	const selectedEdgeId = useUIStore((s) => s.selectedEdgeId);
+	// Show the panel only when exactly one element is selected.
 	const hasSelection = selectedNodeId !== null || selectedEdgeId !== null;
 
 	// Hydrate the Zustand store when both the diagram and catalog have loaded.
@@ -212,30 +214,40 @@ function EditorCanvas() {
 	);
 
 	/**
-	 * Tracks the clicked node in the UI store so the properties panel can
-	 * display its details.
+	 * Unified selection handler driven by React Flow's `onSelectionChange`.
+	 *
+	 * `onSelectionChange` fires on every selection-state change — single click,
+	 * Shift+Click multi-select, drag-marquee select, and programmatic changes —
+	 * and receives the **complete** current selection rather than just the
+	 * element that was last clicked. This makes it the single source of truth
+	 * for the properties panel.
+	 *
+	 * Routing logic:
+	 * - Exactly 1 node, 0 edges selected → `setSelectedNode`
+	 * - Exactly 0 nodes, 1 edge selected → `setSelectedEdge`
+	 * - Any other combination (0 items, multiple nodes, multiple edges, mixed) →
+	 *   `clearSelection` — the properties panel hides for multi-select because
+	 *   it cannot meaningfully display properties for more than one element.
 	 */
-	const handleNodeClick = useCallback(
-		(_event: React.MouseEvent, node: Node) => {
-			setSelectedNode(node.id);
+	const handleSelectionChange = useCallback(
+		({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
+			if (selectedNodes.length === 1 && selectedEdges.length === 0) {
+				setSelectedNode(selectedNodes[0].id);
+			} else if (selectedNodes.length === 0 && selectedEdges.length === 1) {
+				setSelectedEdge(selectedEdges[0].id);
+			} else {
+				// Covers: nothing selected, multi-select, or mixed node+edge selection.
+				clearSelection();
+			}
 		},
-		[setSelectedNode],
-	);
-
-	/**
-	 * Tracks the clicked edge in the UI store so the properties panel can
-	 * display its details.
-	 */
-	const handleEdgeClick = useCallback(
-		(_event: React.MouseEvent, edge: Edge) => {
-			setSelectedEdge(edge.id);
-		},
-		[setSelectedEdge],
+		[setSelectedNode, setSelectedEdge, clearSelection],
 	);
 
 	/**
 	 * Clears the selection in the UI store when the user clicks on empty canvas
-	 * space (not on a node or edge).
+	 * space. Belt-and-suspenders alongside `handleSelectionChange` — React Flow
+	 * also fires `onSelectionChange` with empty arrays on a pane click, but
+	 * being explicit here makes the intent unambiguous.
 	 */
 	const handlePaneClick = useCallback(() => {
 		clearSelection();
@@ -268,8 +280,7 @@ function EditorCanvas() {
 					edgeTypes={edgeTypes}
 					onDrop={handleDrop}
 					onDragOver={handleDragOver}
-					onNodeClick={handleNodeClick}
-					onEdgeClick={handleEdgeClick}
+					onSelectionChange={handleSelectionChange}
 					onPaneClick={handlePaneClick}
 					// fitView is intentionally omitted.  React Flow defers fitView
 					// when the node array is empty on mount, then fires it the moment

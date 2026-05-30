@@ -28,8 +28,7 @@ const mockFitView = vi.fn();
  * React events on internal React Flow internals.
  */
 const capturedHandlers: {
-	onNodeClick?: (event: React.MouseEvent, node: { id: string }) => void;
-	onEdgeClick?: (event: React.MouseEvent, edge: { id: string }) => void;
+	onSelectionChange?: (params: { nodes: { id: string }[]; edges: { id: string }[] }) => void;
 	onPaneClick?: () => void;
 } = {};
 
@@ -38,21 +37,19 @@ const capturedHandlers: {
  *
  * The ReactFlow mock forwards `onDrop` and `onDragOver` to the rendered div
  * so test code can fire synthetic events on `data-testid="reactflow"` and
- * have the handlers execute. `onNodeClick`, `onEdgeClick`, and `onPaneClick`
- * are captured in `capturedHandlers` so tests can call them directly.
+ * have the handlers execute. `onSelectionChange` and `onPaneClick` are
+ * captured in `capturedHandlers` so tests can call them directly.
  */
 vi.mock("@xyflow/react", () => ({
 	ReactFlow: (props: {
 		children: React.ReactNode;
 		onDrop?: React.DragEventHandler;
 		onDragOver?: React.DragEventHandler;
-		onNodeClick?: (event: React.MouseEvent, node: { id: string }) => void;
-		onEdgeClick?: (event: React.MouseEvent, edge: { id: string }) => void;
+		onSelectionChange?: (params: { nodes: { id: string }[]; edges: { id: string }[] }) => void;
 		onPaneClick?: () => void;
 	}) => {
 		// Capture selection handlers for use in test assertions.
-		capturedHandlers.onNodeClick = props.onNodeClick;
-		capturedHandlers.onEdgeClick = props.onEdgeClick;
+		capturedHandlers.onSelectionChange = props.onSelectionChange;
 		capturedHandlers.onPaneClick = props.onPaneClick;
 
 		return (
@@ -203,8 +200,7 @@ describe("EditorDrop", () => {
 		mockZoomOut.mockClear();
 		mockFitView.mockClear();
 		mockScreenToFlowPosition.mockClear().mockReturnValue({ x: 100, y: 200 });
-		capturedHandlers.onNodeClick = undefined;
-		capturedHandlers.onEdgeClick = undefined;
+		capturedHandlers.onSelectionChange = undefined;
 		capturedHandlers.onPaneClick = undefined;
 		vi.restoreAllMocks();
 		setupFetch();
@@ -345,28 +341,73 @@ describe("EditorDrop", () => {
 
 	// ── Selection handlers ─────────────────────────────────────────────────────
 
-	it("onNodeClick sets selectedNodeId in the UI store", async () => {
+	it("onSelectionChange with exactly one node sets selectedNodeId", async () => {
 		renderEditor();
 		await waitForCanvas();
 
-		expect(capturedHandlers.onNodeClick).toBeDefined();
-		capturedHandlers.onNodeClick?.({} as React.MouseEvent, { id: "node-abc" } as { id: string });
+		expect(capturedHandlers.onSelectionChange).toBeDefined();
+		capturedHandlers.onSelectionChange?.({ nodes: [{ id: "node-abc" }], edges: [] });
 
 		expect(useUIStore.getState().selectedNodeId).toBe("node-abc");
-		// Selecting a node must clear any edge selection.
+		// Selecting a single node must clear any edge selection.
 		expect(useUIStore.getState().selectedEdgeId).toBeNull();
 	});
 
-	it("onEdgeClick sets selectedEdgeId in the UI store", async () => {
+	it("onSelectionChange with exactly one edge sets selectedEdgeId", async () => {
 		renderEditor();
 		await waitForCanvas();
 
-		expect(capturedHandlers.onEdgeClick).toBeDefined();
-		capturedHandlers.onEdgeClick?.({} as React.MouseEvent, { id: "edge-xyz" } as { id: string });
+		expect(capturedHandlers.onSelectionChange).toBeDefined();
+		capturedHandlers.onSelectionChange?.({ nodes: [], edges: [{ id: "edge-xyz" }] });
 
 		expect(useUIStore.getState().selectedEdgeId).toBe("edge-xyz");
-		// Selecting an edge must clear any node selection.
+		// Selecting a single edge must clear any node selection.
 		expect(useUIStore.getState().selectedNodeId).toBeNull();
+	});
+
+	it("onSelectionChange with multiple nodes clears selection (multi-select hides panel)", async () => {
+		// Start with a single node selected.
+		useUIStore.setState({ selectedNodeId: "n1", selectedEdgeId: null });
+
+		renderEditor();
+		await waitForCanvas();
+
+		expect(capturedHandlers.onSelectionChange).toBeDefined();
+		// Shift+click a second node — React Flow reports both as selected.
+		capturedHandlers.onSelectionChange?.({
+			nodes: [{ id: "n1" }, { id: "n2" }],
+			edges: [],
+		});
+
+		// Both selections must be cleared — the properties panel should not show.
+		expect(useUIStore.getState().selectedNodeId).toBeNull();
+		expect(useUIStore.getState().selectedEdgeId).toBeNull();
+	});
+
+	it("onSelectionChange with mixed node+edge selection clears selection", async () => {
+		renderEditor();
+		await waitForCanvas();
+
+		capturedHandlers.onSelectionChange?.({
+			nodes: [{ id: "n1" }],
+			edges: [{ id: "e1" }],
+		});
+
+		expect(useUIStore.getState().selectedNodeId).toBeNull();
+		expect(useUIStore.getState().selectedEdgeId).toBeNull();
+	});
+
+	it("onSelectionChange with empty arrays clears selection", async () => {
+		// Seed a selection.
+		useUIStore.setState({ selectedNodeId: "n1", selectedEdgeId: null });
+
+		renderEditor();
+		await waitForCanvas();
+
+		capturedHandlers.onSelectionChange?.({ nodes: [], edges: [] });
+
+		expect(useUIStore.getState().selectedNodeId).toBeNull();
+		expect(useUIStore.getState().selectedEdgeId).toBeNull();
 	});
 
 	it("onPaneClick clears both node and edge selection", async () => {
