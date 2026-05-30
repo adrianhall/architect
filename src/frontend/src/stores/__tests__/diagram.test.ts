@@ -206,6 +206,126 @@ describe("useDiagramStore", () => {
 		});
 	});
 
+	// ── updateNodeData ─────────────────────────────────────────────────────────
+
+	describe("updateNodeData", () => {
+		it("merges data updates onto the existing node, preserving other fields", () => {
+			const node = makeNode("n1", {
+				data: { label: "Workers", serviceTypeId: "workers" },
+			});
+			useDiagramStore.setState({ nodes: [node] });
+
+			useDiagramStore.getState().updateNodeData("n1", { label: "My Worker" });
+
+			const updated = useDiagramStore.getState().nodes[0];
+			// Label is updated.
+			expect(updated.data.label).toBe("My Worker");
+			// Other data fields are preserved.
+			expect(updated.data.serviceTypeId).toBe("workers");
+		});
+
+		it("can set a new data field without affecting existing fields", () => {
+			const node = makeNode("n1", { data: { label: "Workers" } });
+			useDiagramStore.setState({ nodes: [node] });
+
+			useDiagramStore.getState().updateNodeData("n1", { description: "My description" });
+
+			const updated = useDiagramStore.getState().nodes[0];
+			expect(updated.data.label).toBe("Workers");
+			expect(updated.data.description).toBe("My description");
+		});
+
+		it("can clear a data field by setting it to undefined", () => {
+			const node = makeNode("n1", {
+				data: { label: "Workers", accentColor: "#ff0000" },
+			});
+			useDiagramStore.setState({ nodes: [node] });
+
+			useDiagramStore.getState().updateNodeData("n1", { accentColor: undefined });
+
+			const updated = useDiagramStore.getState().nodes[0];
+			// accentColor is explicitly set to undefined (key present, value undefined).
+			expect(Object.keys(updated.data)).toContain("accentColor");
+			expect(updated.data.accentColor).toBeUndefined();
+			// label is unaffected.
+			expect(updated.data.label).toBe("Workers");
+		});
+
+		it("is a no-op when the nodeId does not exist", () => {
+			const node = makeNode("n1", { data: { label: "Workers" } });
+			useDiagramStore.setState({ nodes: [node] });
+
+			useDiagramStore.getState().updateNodeData("nonexistent", { label: "test" });
+
+			// The existing node is unchanged.
+			expect(useDiagramStore.getState().nodes).toHaveLength(1);
+			expect(useDiagramStore.getState().nodes[0].data.label).toBe("Workers");
+		});
+
+		it("leaves other nodes unchanged when updating one node", () => {
+			const n1 = makeNode("n1", { data: { label: "Workers" } });
+			const n2 = makeNode("n2", { data: { label: "Pages" } });
+			useDiagramStore.setState({ nodes: [n1, n2] });
+
+			useDiagramStore.getState().updateNodeData("n1", { label: "My Worker" });
+
+			expect(useDiagramStore.getState().nodes[0].data.label).toBe("My Worker");
+			expect(useDiagramStore.getState().nodes[1].data.label).toBe("Pages");
+		});
+	});
+
+	// ── updateEdgeData ─────────────────────────────────────────────────────────
+
+	describe("updateEdgeData", () => {
+		it("merges data updates onto the existing edge, preserving other data fields", () => {
+			const edge = makeEdge("e1", "n1", "n2", { data: { label: "HTTP" } });
+			useDiagramStore.setState({ edges: [edge] });
+
+			useDiagramStore.getState().updateEdgeData("e1", { protocol: "HTTPS" });
+
+			const updated = useDiagramStore.getState().edges[0];
+			// Protocol was added.
+			expect(updated.data?.protocol).toBe("HTTPS");
+			// Label is preserved.
+			expect(updated.data?.label).toBe("HTTP");
+		});
+
+		it("does not change the top-level edge type", () => {
+			const edge = makeEdge("e1", "n1", "n2", { type: "data-flow" });
+			useDiagramStore.setState({ edges: [edge] });
+
+			// Passing type inside dataUpdates should NOT change the top-level type.
+			// updateEdgeData only touches edge.data, not edge.type.
+			useDiagramStore.getState().updateEdgeData("e1", { label: "test" });
+
+			const updated = useDiagramStore.getState().edges[0];
+			expect(updated.type).toBe("data-flow");
+		});
+
+		it("is a no-op when the edgeId does not exist", () => {
+			const edge = makeEdge("e1", "n1", "n2", { data: { label: "HTTP" } });
+			useDiagramStore.setState({ edges: [edge] });
+
+			useDiagramStore.getState().updateEdgeData("nonexistent", { label: "test" });
+
+			// The existing edge is unchanged.
+			expect(useDiagramStore.getState().edges).toHaveLength(1);
+			expect(useDiagramStore.getState().edges[0].data?.label).toBe("HTTP");
+		});
+
+		it("leaves other edges unchanged when updating one edge", () => {
+			const e1 = makeEdge("e1", "n1", "n2", { data: { label: "HTTP" } });
+			const e2 = makeEdge("e2", "n2", "n3", { data: { label: "gRPC" } });
+			useDiagramStore.setState({ edges: [e1, e2] });
+
+			useDiagramStore.getState().updateEdgeData("e1", { protocol: "HTTPS" });
+
+			expect(useDiagramStore.getState().edges[0].data?.protocol).toBe("HTTPS");
+			expect(useDiagramStore.getState().edges[1].data?.label).toBe("gRPC");
+			expect(useDiagramStore.getState().edges[1].data?.protocol).toBeUndefined();
+		});
+	});
+
 	// ── onConnect ──────────────────────────────────────────────────────────────
 
 	describe("onConnect", () => {

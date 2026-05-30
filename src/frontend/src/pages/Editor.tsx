@@ -17,6 +17,7 @@ import { edgeTypes } from "@/components/canvas/edgeTypes";
 import { nodeTypes } from "@/components/canvas/nodeTypes";
 import { toReactFlowEdge, toReactFlowNode } from "@/components/canvas/utils";
 import { ServicePalette } from "@/components/palette/ServicePalette";
+import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import { useDiagramStore } from "@/stores/diagram";
 import { useUIStore } from "@/stores/ui";
 
@@ -68,6 +69,9 @@ function EditorCanvas() {
 	const setSelectedNode = useUIStore((s) => s.setSelectedNode);
 	const setSelectedEdge = useUIStore((s) => s.setSelectedEdge);
 	const clearSelection = useUIStore((s) => s.clearSelection);
+	const selectedNodeId = useUIStore((s) => s.selectedNodeId);
+	const selectedEdgeId = useUIStore((s) => s.selectedEdgeId);
+	const hasSelection = selectedNodeId !== null || selectedEdgeId !== null;
 
 	// Hydrate the Zustand store when both the diagram and catalog have loaded.
 	useEffect(() => {
@@ -252,7 +256,7 @@ function EditorCanvas() {
 				<ServicePalette />
 			</aside>
 
-			{/* React Flow canvas */}
+			{/* React Flow canvas — flex-1 takes remaining space after palette and panel */}
 			<div className="flex-1">
 				<ReactFlow
 					nodes={nodes}
@@ -287,6 +291,13 @@ function EditorCanvas() {
 					<Background variant={BackgroundVariant.Dots} gap={16} size={1} />
 				</ReactFlow>
 			</div>
+
+			{/* Properties panel — shown only when a node or edge is selected */}
+			{hasSelection && (
+				<aside className="w-72 shrink-0 border-l bg-background">
+					<PropertiesPanel />
+				</aside>
+			)}
 		</div>
 	);
 }
@@ -302,8 +313,11 @@ function EditorCanvas() {
  * The page layout is a horizontal flex container:
  * - Left: a 240 px service palette sidebar listing all Cloudflare services
  *   grouped by category.
- * - Right: the full React Flow canvas with minimap, controls, background grid,
+ * - Center: the full React Flow canvas with minimap, controls, background grid,
  *   keyboard shortcuts, and drag-drop node creation.
+ * - Right (conditional): a 288 px properties panel shown only when a node or
+ *   edge is selected. Hidden when nothing is selected so the canvas uses the
+ *   full remaining width.
  *
  * Route: `/editor/:id` (requires authentication via `ProtectedRoute`).
  *

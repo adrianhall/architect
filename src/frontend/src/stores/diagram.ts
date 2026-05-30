@@ -130,6 +130,57 @@ interface DiagramState {
 	updateEdge: (edgeId: string, updates: Partial<Edge>) => void;
 
 	/**
+	 * Deeply merges updates into the `data` object of a node identified by
+	 * `nodeId`.
+	 *
+	 * Only the keys present in `dataUpdates` are overwritten; all other keys
+	 * on the existing `node.data` object are preserved. This is the correct
+	 * action for updating individual node properties such as `label`,
+	 * `description`, or `accentColor` without accidentally clearing unrelated
+	 * fields.
+	 *
+	 * If `nodeId` does not exist in the current nodes array the call is a
+	 * no-op — no error is thrown and the nodes array is not mutated.
+	 *
+	 * @param nodeId - The `id` of the node whose data to update.
+	 * @param dataUpdates - Keys/values to merge onto the existing `node.data`.
+	 *
+	 * @example
+	 * ```ts
+	 * // Update only the label; all other data fields are preserved.
+	 * updateNodeData("01HX...", { label: "My Worker" });
+	 * ```
+	 */
+	updateNodeData: (nodeId: string, dataUpdates: Record<string, unknown>) => void;
+
+	/**
+	 * Deeply merges updates into the `data` object of an edge identified by
+	 * `edgeId`.
+	 *
+	 * Only the keys present in `dataUpdates` are overwritten; all other keys
+	 * on the existing `edge.data` object are preserved. This is the correct
+	 * action for updating edge metadata such as `label`, `protocol`, or
+	 * `description` without clearing other fields.
+	 *
+	 * To change the top-level `type` of an edge (e.g. from `"data-flow"` to
+	 * `"binding"`), use `updateEdge(edgeId, { type: "binding" })` instead —
+	 * `updateEdgeData` only touches the nested `edge.data` object.
+	 *
+	 * If `edgeId` does not exist in the current edges array the call is a
+	 * no-op — no error is thrown and the edges array is not mutated.
+	 *
+	 * @param edgeId - The `id` of the edge whose data to update.
+	 * @param dataUpdates - Keys/values to merge onto the existing `edge.data`.
+	 *
+	 * @example
+	 * ```ts
+	 * // Update protocol without losing any existing label or description.
+	 * updateEdgeData("01HX...", { protocol: "HTTPS" });
+	 * ```
+	 */
+	updateEdgeData: (edgeId: string, dataUpdates: Record<string, unknown>) => void;
+
+	/**
 	 * React Flow connection handler — creates a new `data-flow` edge when the
 	 * user drags from one node handle to another.
 	 *
@@ -173,7 +224,8 @@ interface DiagramState {
  *
  * Provides React Flow-compatible change handlers (`onNodesChange`,
  * `onEdgesChange`, `onConnect`) and imperative mutation actions (`addNode`,
- * `removeNodes`, `removeEdges`, `addEdge`, `updateEdge`, `setDiagram`).
+ * `removeNodes`, `removeEdges`, `addEdge`, `updateEdge`, `updateNodeData`,
+ * `updateEdgeData`, `setDiagram`).
  *
  * Use selector functions to subscribe to individual slices so that components
  * only re-render when the slice they care about changes:
@@ -229,6 +281,18 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 	updateEdge: (edgeId, updates) => {
 		set({
 			edges: get().edges.map((e) => (e.id === edgeId ? { ...e, ...updates } : e)),
+		});
+	},
+
+	updateNodeData: (nodeId, dataUpdates) => {
+		set({
+			nodes: get().nodes.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...dataUpdates } } : n)),
+		});
+	},
+
+	updateEdgeData: (edgeId, dataUpdates) => {
+		set({
+			edges: get().edges.map((e) => (e.id === edgeId ? { ...e, data: { ...e.data, ...dataUpdates } } : e)),
 		});
 	},
 
