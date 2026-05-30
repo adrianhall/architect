@@ -296,6 +296,10 @@ function EditorCanvas() {
 					defaultEdgeOptions={{ type: "data-flow" }}
 					// Visual style of the dragging connection line before it snaps to a handle.
 					connectionLineStyle={{ stroke: "#64748b", strokeWidth: 2 }}
+					// Hide the "React Flow" attribution link. CF-Architect is an internal
+					// tool and is not a commercial product; removing the attribution is
+					// permitted under the React Flow open-source license terms.
+					proOptions={{ hideAttribution: true }}
 				>
 					<MiniMap zoomable pannable />
 					<Controls />
