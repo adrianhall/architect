@@ -527,10 +527,12 @@ This produced two visible bugs:
 ### Zustand two-`set` pattern requires corrected subscribe logic in `useDiagramSync`
 
 **Decision:** The spec's `useDiagramStore.subscribe` callback checked two conditions separately:
+
 1. Whether `nodes`, `edges`, or `title` changed reference (content guard).
 2. Whether `dirty` is `true` (dirty guard).
 
 In practice, every mutating store action (e.g. `addNode`) does TWO consecutive `set` calls:
+
 - First `set`: updates `nodes` (new array reference) but `dirty` is still `false`.
 - Second `set` (inside `pushUndoOperation`): updates `undoStack` and sets `dirty = true`.
 
