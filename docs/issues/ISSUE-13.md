@@ -174,7 +174,7 @@ function CloudflareServiceNode({ data, selected }: NodeProps) {
     <div
       className={cn(
         "flex flex-col items-center rounded-lg border-2 bg-white dark:bg-gray-900",
-        "w-[120px] h-[100px] overflow-hidden transition-shadow",
+        "w-30 h-25 overflow-hidden transition-shadow",
         selected && "shadow-lg ring-2 ring-blue-400"
       )}
       style={{ borderColor }}

@@ -148,7 +148,7 @@ function PaletteItem({ service }: PaletteItemProps) {
       <img
         src={`/catalog/icons/${service.iconPath}`}
         alt={`${service.shortName} icon`}
-        className="h-5 w-5 flex-shrink-0 object-contain"
+        className="h-5 w-5 shrink-0 object-contain"
         draggable={false}
       />
       <span className="truncate text-sm">{service.shortName}</span>
@@ -201,7 +201,7 @@ function PaletteCategory({ category, services }: PaletteCategoryProps) {
       >
         {/* Color dot */}
         <span
-          className="h-2.5 w-2.5 flex-shrink-0 rounded-full"
+          className="h-2.5 w-2.5 shrink-0 rounded-full"
           style={{ backgroundColor: category.color }}
           aria-hidden="true"
         />
@@ -212,7 +212,7 @@ function PaletteCategory({ category, services }: PaletteCategoryProps) {
         {/* Chevron toggle */}
         <ChevronRight
           className={cn(
-            "h-4 w-4 flex-shrink-0 transition-transform duration-200",
+            "h-4 w-4 shrink-0 transition-transform duration-200",
             !isCollapsed && "rotate-90"
           )}
           aria-hidden="true"
@@ -225,7 +225,7 @@ function PaletteCategory({ category, services }: PaletteCategoryProps) {
         ref={contentRef}
         className={cn(
           "overflow-hidden transition-[max-height] duration-200 ease-in-out",
-          isCollapsed ? "max-h-0" : "max-h-[2000px]"
+          isCollapsed ? "max-h-0" : "max-h-500"
         )}
         role="region"
         aria-label={`${category.label} services`}
@@ -388,7 +388,7 @@ function EditorCanvas() {
   return (
     <div className="flex h-full">
       {/* Palette sidebar */}
-      <aside className="w-60 flex-shrink-0 border-r bg-background">
+      <aside className="w-60 shrink-0 border-r bg-background">
         <ServicePalette />
       </aside>
 
