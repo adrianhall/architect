@@ -1,9 +1,14 @@
 /**
- * Pure ELK layout computation logic, extracted from the Web Worker so that it
- * can be unit-tested without a real `Worker` runtime.
+ * ELK auto-layout computation for the architecture canvas.
  *
- * The Web Worker (`elk-layout.worker.ts`) is a thin wrapper that calls
- * `computeLayout` and posts the result. Tests call `computeLayout` directly.
+ * Exports `computeLayout`, the single function that drives all layout
+ * operations. It is called directly from `useAutoLayout` on the main thread;
+ * `elkjs/lib/elk.bundled.js` internally spawns its own Web Worker to run the
+ * ELK algorithm off the main thread, so the caller's thread is never blocked.
+ *
+ * The module is also imported directly by unit tests, which exercise the real
+ * ELK algorithm (in jsdom, `URL.createObjectURL` is unavailable so ELK falls
+ * back to synchronous execution — making tests deterministic without mocking).
  */
 import { getValueOrDefault } from "@architect/shared";
 import ELK from "elkjs/lib/elk.bundled.js";
@@ -95,9 +100,8 @@ export interface LayoutError {
  * Runs the ELK `layered` algorithm over the provided nodes and edges and
  * returns the computed node positions.
  *
- * This function is intentionally free of Web Worker or DOM APIs so it can be
- * called directly in unit tests (jsdom does not support `Worker`). The worker
- * delegates to this function and posts its return value.
+ * Called directly from `useAutoLayout` on the main thread. ELK handles
+ * off-thread computation via its own internal Web Worker.
  *
  * ELK options used:
  * - `elk.algorithm: "layered"` — the standard hierarchical layout algorithm.

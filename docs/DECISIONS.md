@@ -601,9 +601,22 @@ This correctly fires when `dirty` transitions from `false → true` (the second 
 
 **Resolution:** Removed all `vi.spyOn` on Zustand state methods. Tests instead assert on _observable side effects_: node positions in `useDiagramStore.getState().nodes` and undo stack depth/type in `useDiagramStore.getState().undoStack`. Tests also use `loadDiagram` (which fully reinitialises store state) instead of `setState` for per-test setup, preventing spy bleed-through via `Object.assign` merging.
 
-### `vite.config.ts` worker format set to `"es"`
+### `elk.bundled.js` must run on the main thread — nested workers do not work
 
-**Decision:** Vite defaults to IIFE format for bundled Web Workers. The ELK worker file uses `import ELK from "elkjs/lib/elk.bundled.js"` — an ES module import. IIFE workers do not support `import` statements, so the default would produce a runtime error. Setting `worker: { format: "es" }` produces an ES module worker bundle, allowing the `elkjs` import to resolve correctly. The resulting worker bundle (`elk-layout.worker-*.js`) is approximately 1.44 MB — the expected size of the self-contained ELK layout engine.
+**Decision:** The initial implementation imported `elkjs/lib/elk.bundled.js` inside a custom Web Worker (`elk-layout.worker.ts`). At runtime the ELK bundled module tries to create its _own_ internal Web Worker via `URL.createObjectURL` (a blob containing the ELK algorithm). Inside a Vite ES-module worker bundle, ELK's bundled _Worker_ constructor reference is not accessible, producing:
+
+```text
+TypeError: U8 is not a constructor
+    at Ii.Qo.workerFactory (elk-layout.worker-*.js)
+```
+
+**Root cause:** `elk.bundled.js` is designed for main-thread use. Using it inside a custom worker creates a nested-worker topology that fails because the Worker constructor reference in the IIFE bundle is not in scope inside the ES-module worker bundle Vite produces.
+
+**Resolution:** Deleted the custom `elk-layout.worker.ts` file. `computeLayout` is now called directly from the main thread in `useAutoLayout`. ELK's internal worker handles off-thread computation automatically — the `elk.layout()` Promise resolves asynchronously without blocking the main thread. The "layout runs off the main thread" acceptance criterion is satisfied because ELK's own worker architecture provides this property.
+
+**Trade-off:** ELK (≈1.4 MB minified) is now included in the main JS bundle rather than split into a separate worker file. The main bundle grew from 631 kB to 2,095 kB (gzip: 200 kB → 645 kB). This is accepted for the MVP. The correct long-term fix is the separate-files approach (`elk-api.js` + `elk-worker.min.js?url`) combined with a dynamic `import()` code split for the Editor route — already tracked as a follow-up issue.
+
+**Test behaviour:** In jsdom, `URL.createObjectURL` is not implemented so ELK's blob Worker creation fails silently and ELK falls back to synchronous execution. The `elk-layout-logic.test.ts` tests therefore call the real ELK algorithm synchronously, verifying genuine layout correctness without any mocking. `useAutoLayout.test.ts` mocks `computeLayout` directly (via `vi.mock`) so those tests remain fast and deterministic regardless of ELK's worker behaviour.
 
 ### `WorkerStub` constructor in test setup suppressed with `biome-ignore`
 

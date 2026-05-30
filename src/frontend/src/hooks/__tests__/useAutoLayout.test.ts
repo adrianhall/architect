@@ -1,97 +1,36 @@
 /**
  * Tests for the `useAutoLayout` hook.
  *
- * jsdom does not support the `Worker` constructor. The tests mock the global
- * `Worker` class with a minimal fake that captures `postMessage` calls and
- * lets the test control `message` event delivery via `fireMessage`.
- *
- * Store assertions use OBSERVABLE SIDE EFFECTS (node positions, undo stack)
- * instead of spying on Zustand store methods. This avoids a subtle bug where
- * vi.spyOn on a Zustand state method persists across tests via Object.assign
- * state merging, causing spurious call counts.
+ * `computeLayout` is mocked via `vi.mock` so these tests verify only the
+ * hook's state management and store integration, not ELK's layout algorithm
+ * (which is covered by elk-layout-logic.test.ts). The mock returns a resolved
+ * Promise immediately so tests run synchronously without real ELK computation.
  */
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDiagramStore } from "../../stores/diagram";
-import type { LayoutError, LayoutResult } from "../../workers/elk-layout-logic";
 import { useAutoLayout } from "../useAutoLayout";
 
 // ---------------------------------------------------------------------------
-// Fake Worker implementation
+// Mock computeLayout
 // ---------------------------------------------------------------------------
 
-/** Captured state from the most recently created fake Worker instance. */
-let fakeWorkerInstance: FakeWorker | null = null;
+const mockComputeLayout = vi.fn();
 
-/**
- * A minimal in-memory Worker mock that:
- * - Exposes `postMessage` as a spy so tests can assert what was posted.
- * - Exposes `terminate` as a spy so tests can assert cleanup.
- * - Stores registered `message` listeners so tests can fire them manually.
- */
-class FakeWorker {
-	postMessage = vi.fn();
-	terminate = vi.fn();
-
-	private messageListeners: Array<(event: MessageEvent) => void> = [];
-
-	constructor(_url: string | URL, _opts?: WorkerOptions) {
-		// Track the latest instance so tests can access it.
-		fakeWorkerInstance = this;
-	}
-
-	addEventListener(type: string, listener: (event: MessageEvent) => void) {
-		if (type === "message") {
-			this.messageListeners.push(listener);
-		}
-	}
-
-	removeEventListener(type: string, listener: (event: MessageEvent) => void) {
-		if (type === "message") {
-			this.messageListeners = this.messageListeners.filter((l) => l !== listener);
-		}
-	}
-
-	/** Test helper: simulate the worker posting a message back. */
-	fireMessage(data: LayoutResult | LayoutError) {
-		const event = { data } as MessageEvent<LayoutResult | LayoutError>;
-		for (const listener of [...this.messageListeners]) {
-			listener(event);
-		}
-	}
-}
-
-/**
- * Returns the current `fakeWorkerInstance`, throwing an assertion error if it
- * has not been created yet. Avoids the non-null assertion operator while
- * giving clear diagnostics on failure.
- */
-function getWorker(): FakeWorker {
-	if (!fakeWorkerInstance) {
-		throw new Error("FakeWorker was not instantiated — did the hook create a Worker?");
-	}
-	return fakeWorkerInstance;
-}
+vi.mock("../../workers/elk-layout-logic", () => ({
+	computeLayout: (...args: unknown[]) => mockComputeLayout(...args),
+}));
 
 // ---------------------------------------------------------------------------
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-	fakeWorkerInstance = null;
-	// Install the fake Worker globally so `new Worker(...)` inside the hook
-	// returns our FakeWorker.
-	Object.defineProperty(globalThis, "Worker", {
-		writable: true,
-		configurable: true,
-		value: FakeWorker,
-	});
+	mockComputeLayout.mockReset();
+	// Default: return an empty positions array (no-op layout).
+	mockComputeLayout.mockResolvedValue([]);
 
-	// Reset the Zustand store to a clean state using loadDiagram, which
-	// completely reinitialises the store including all undo/redo state.
-	// Using loadDiagram (instead of setState) avoids the issue where
-	// vi.spyOn-wrapped functions persist in the new Zustand state via
-	// Object.assign when setState is called.
+	// Reset the Zustand store to a clean state.
 	useDiagramStore.getState().loadDiagram("test-id", "Test", [], [], undefined, 1);
 });
 
@@ -105,18 +44,32 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("useAutoLayout", () => {
-	it("creates a Worker on mount and terminates it on unmount", () => {
-		const { unmount } = renderHook(() => useAutoLayout());
+	it("isLayouting is true while computeLayout is in progress", async () => {
+		// Make the mock never resolve so we can check the intermediate state.
+		mockComputeLayout.mockReturnValue(new Promise(() => {}));
 
-		expect(fakeWorkerInstance).not.toBeNull();
+		const { result } = renderHook(() => useAutoLayout());
 
-		unmount();
+		act(() => {
+			result.current.applyLayout("TB");
+		});
 
-		expect(getWorker().terminate).toHaveBeenCalledOnce();
+		expect(result.current.isLayouting).toBe(true);
 	});
 
-	it("applyLayout sends a postMessage with the correct structure", () => {
-		// Seed the store with some nodes so we can assert the message payload.
+	it("isLayouting returns to false after a successful layout", async () => {
+		mockComputeLayout.mockResolvedValue([]);
+
+		const { result } = renderHook(() => useAutoLayout());
+
+		await act(async () => {
+			await result.current.applyLayout("TB");
+		});
+
+		expect(result.current.isLayouting).toBe(false);
+	});
+
+	it("passes the correct direction and node/edge data to computeLayout", async () => {
 		useDiagramStore.getState().loadDiagram(
 			"test-id",
 			"Test",
@@ -129,50 +82,24 @@ describe("useAutoLayout", () => {
 			1,
 		);
 
+		mockComputeLayout.mockResolvedValue([]);
+
 		const { result } = renderHook(() => useAutoLayout());
 
-		act(() => {
-			result.current.applyLayout("TB");
+		await act(async () => {
+			await result.current.applyLayout("LR");
 		});
 
-		const worker = getWorker();
-		expect(worker.postMessage).toHaveBeenCalledOnce();
-
-		const payload = worker.postMessage.mock.calls[0][0];
-		expect(payload.direction).toBe("TB");
-		expect(payload.nodes).toHaveLength(2);
-		expect(payload.nodes[0].id).toBe("n1");
-		expect(payload.edges).toHaveLength(1);
-		expect(payload.edges[0].id).toBe("e1");
+		expect(mockComputeLayout).toHaveBeenCalledOnce();
+		const [nodes, edges, direction] = mockComputeLayout.mock.calls[0];
+		expect(direction).toBe("LR");
+		expect(nodes).toHaveLength(2);
+		expect(nodes[0].id).toBe("n1");
+		expect(edges).toHaveLength(1);
+		expect(edges[0].id).toBe("e1");
 	});
 
-	it("isLayouting is true while waiting for worker response", () => {
-		const { result } = renderHook(() => useAutoLayout());
-
-		act(() => {
-			result.current.applyLayout("TB");
-		});
-
-		expect(result.current.isLayouting).toBe(true);
-	});
-
-	it("isLayouting resets to false after receiving a result", () => {
-		const { result } = renderHook(() => useAutoLayout());
-
-		act(() => {
-			result.current.applyLayout("LR");
-		});
-
-		expect(result.current.isLayouting).toBe(true);
-
-		act(() => {
-			getWorker().fireMessage({ type: "result", positions: [] });
-		});
-
-		expect(result.current.isLayouting).toBe(false);
-	});
-
-	it("layout result moves nodes in the store and pushes a single undo step", () => {
+	it("moves nodes in the store and pushes a single undo step", async () => {
 		useDiagramStore.getState().loadDiagram(
 			"test-id",
 			"Test",
@@ -185,35 +112,25 @@ describe("useAutoLayout", () => {
 			1,
 		);
 
+		mockComputeLayout.mockResolvedValue([
+			{ nodeId: "a", position: { x: 10, y: 20 } },
+			{ nodeId: "b", position: { x: 10, y: 150 } },
+		]);
+
 		const { result } = renderHook(() => useAutoLayout());
 
-		act(() => {
-			result.current.applyLayout("TB");
+		await act(async () => {
+			await result.current.applyLayout("TB");
 		});
 
-		act(() => {
-			getWorker().fireMessage({
-				type: "result",
-				positions: [
-					{ nodeId: "a", position: { x: 10, y: 20 } },
-					{ nodeId: "b", position: { x: 10, y: 150 } },
-				],
-			});
-		});
-
-		// Check observable effects: node positions updated.
 		const state = useDiagramStore.getState();
-		const nodeA = state.nodes.find((n) => n.id === "a");
-		const nodeB = state.nodes.find((n) => n.id === "b");
-		expect(nodeA?.position).toEqual({ x: 10, y: 20 });
-		expect(nodeB?.position).toEqual({ x: 10, y: 150 });
-
-		// Exactly one undo step recorded (the batch).
+		expect(state.nodes.find((n) => n.id === "a")?.position).toEqual({ x: 10, y: 20 });
+		expect(state.nodes.find((n) => n.id === "b")?.position).toEqual({ x: 10, y: 150 });
 		expect(state.undoStack).toHaveLength(1);
 		expect(state.undoStack[0].type).toBe("batch");
 	});
 
-	it("does not push an undo step when no positions changed", () => {
+	it("does not push an undo step when no positions changed", async () => {
 		useDiagramStore
 			.getState()
 			.loadDiagram(
@@ -225,59 +142,37 @@ describe("useAutoLayout", () => {
 				1,
 			);
 
+		// Worker returns the same position the node already has — no change.
+		mockComputeLayout.mockResolvedValue([{ nodeId: "a", position: { x: 10, y: 20 } }]);
+
 		const { result } = renderHook(() => useAutoLayout());
 
-		act(() => {
-			result.current.applyLayout("TB");
+		await act(async () => {
+			await result.current.applyLayout("TB");
 		});
 
-		act(() => {
-			// Worker returns the same position the node already has — no change.
-			getWorker().fireMessage({
-				type: "result",
-				positions: [{ nodeId: "a", position: { x: 10, y: 20 } }],
-			});
-		});
-
-		// No undo step pushed (batch was empty / no-op).
 		expect(useDiagramStore.getState().undoStack).toHaveLength(0);
-		// Node position unchanged.
 		expect(useDiagramStore.getState().nodes[0].position).toEqual({ x: 10, y: 20 });
 	});
 
-	it("resets isLayouting to false on worker error and leaves store unchanged", () => {
+	it("resets isLayouting to false when computeLayout throws", async () => {
 		const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-
-		useDiagramStore
-			.getState()
-			.loadDiagram(
-				"test-id",
-				"Test",
-				[{ id: "a", position: { x: 5, y: 5 }, type: "cloudflareService", data: {} }],
-				[],
-				undefined,
-				1,
-			);
+		mockComputeLayout.mockRejectedValue(new Error("ELK exploded"));
 
 		const { result } = renderHook(() => useAutoLayout());
 
-		act(() => {
-			result.current.applyLayout("TB");
-		});
-
-		act(() => {
-			getWorker().fireMessage({ type: "error", message: "ELK exploded" });
+		await act(async () => {
+			await result.current.applyLayout("TB");
 		});
 
 		expect(result.current.isLayouting).toBe(false);
-
-		// Store is unchanged: no undo step, node still at original position.
 		expect(useDiagramStore.getState().undoStack).toHaveLength(0);
-		expect(useDiagramStore.getState().nodes[0].position).toEqual({ x: 5, y: 5 });
 		expect(consoleSpy).toHaveBeenCalledWith("ELK layout failed:", "ELK exploded");
 	});
 
-	it("ignores a second applyLayout call while a layout is already in progress", () => {
+	it("ignores a second applyLayout call while a layout is already in progress", async () => {
+		mockComputeLayout.mockReturnValue(new Promise(() => {}));
+
 		const { result } = renderHook(() => useAutoLayout());
 
 		act(() => {
@@ -289,7 +184,7 @@ describe("useAutoLayout", () => {
 			result.current.applyLayout("LR");
 		});
 
-		// postMessage should have been called only once (for the first call).
-		expect(getWorker().postMessage).toHaveBeenCalledOnce();
+		// computeLayout should only have been called once.
+		expect(mockComputeLayout).toHaveBeenCalledOnce();
 	});
 });

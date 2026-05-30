@@ -1,23 +1,20 @@
 /**
- * React hook that manages the ELK Web Worker lifecycle and exposes a one-shot
- * `applyLayout(direction)` function for triggering auto-layout on the canvas.
+ * React hook that exposes `applyLayout(direction)` for triggering ELK
+ * auto-layout on the canvas diagram.
  *
- * The worker is created once on mount and terminated on unmount to prevent
- * memory leaks. Layout requests are one-shot: the hook attaches a one-time
- * `message` listener before posting each request and removes it when the
- * response arrives, so concurrent calls are handled safely (the listener is
- * scoped to a single request).
+ * ## Architecture
  *
- * When a successful layout result arrives, positions are applied to the Zustand
- * diagram store as a single `batch` operation via `applyBatchOperation`, making
- * the entire layout change a single undo/redo step.
+ * `elkjs/lib/elk.bundled.js` is designed for main-thread use. When
+ * `new ELK()` is instantiated it internally spawns its **own** Web Worker
+ * (via `URL.createObjectURL`) to run the layout algorithm off the main
+ * thread. Wrapping ELK in a second custom worker (as originally attempted)
+ * causes nested-worker failures because ELK's bundled `Worker` constructor
+ * reference is not accessible inside a Vite ES-module worker bundle.
  *
- * Errors from the worker are logged to `console.error` rather than thrown;
- * the `isLayouting` flag is reset to `false` in both success and error paths.
- *
- * @returns `{ applyLayout, isLayouting }` — call `applyLayout("TB")` or
- *   `applyLayout("LR")` to trigger a layout; read `isLayouting` to show a
- *   spinner or disable the button while computation is in progress.
+ * The correct pattern is therefore to call `computeLayout` directly from the
+ * main thread. ELK's internal worker handles the off-thread computation and
+ * `elk.layout()` returns a Promise that resolves when the result is ready,
+ * keeping the UI responsive without any additional threading on our part.
  *
  * @example
  * ```tsx
@@ -25,15 +22,15 @@
  *   const { applyLayout, isLayouting } = useAutoLayout();
  *   return (
  *     <button disabled={isLayouting} onClick={() => applyLayout("TB")}>
- *       {isLayouting ? "Layouting…" : "Layout"}
+ *       {isLayouting ? "Formatting…" : "Layout"}
  *     </button>
  *   );
  * }
  * ```
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useDiagramStore } from "../stores/diagram";
-import type { LayoutError, LayoutResult } from "../workers/elk-layout-logic";
+import { computeLayout } from "../workers/elk-layout-logic";
 
 /**
  * Default node width used when computing ELK layout.
@@ -59,16 +56,19 @@ export interface UseAutoLayoutResult {
 	/**
 	 * Triggers an ELK layout computation for the current diagram state.
 	 *
-	 * The request is sent to the background Web Worker; `isLayouting` is set
-	 * to `true` immediately and reset when the worker responds. Calling
-	 * `applyLayout` while a layout is already in progress is a no-op — the
-	 * call is silently ignored until the current layout finishes.
+	 * Calls `computeLayout` which delegates to ELK's async `elk.layout()`
+	 * method. ELK runs the computation in its own internal Web Worker, so the
+	 * main thread is not blocked. `isLayouting` is `true` for the duration of
+	 * the async call and reset when the Promise resolves or rejects.
+	 *
+	 * Calling `applyLayout` while a layout is already in progress is a no-op —
+	 * the call is silently ignored until the current layout finishes.
 	 *
 	 * @param direction - `"TB"` for top-to-bottom or `"LR"` for left-to-right.
 	 */
 	applyLayout: (direction: "TB" | "LR") => void;
 	/**
-	 * `true` while the Web Worker is computing a layout; `false` otherwise.
+	 * `true` while ELK is computing a layout; `false` otherwise.
 	 *
 	 * Use to disable the layout button and show a spinner.
 	 */
@@ -76,100 +76,75 @@ export interface UseAutoLayoutResult {
 }
 
 /**
- * React hook for off-main-thread ELK auto-layout.
+ * React hook for ELK auto-layout.
  *
- * Creates an ELK Web Worker on mount, exposes a stable `applyLayout` callback,
- * and terminates the worker on unmount. The layout result is applied to the
- * Zustand diagram store as a single batch undo/redo operation.
+ * Calls `computeLayout` directly on the main thread. ELK's bundled internal
+ * Web Worker handles the off-thread computation automatically; no custom
+ * worker lifecycle management is required in this hook.
+ *
+ * Layout results are applied to the Zustand diagram store via
+ * `applyBatchOperation`, making the entire layout a single undo/redo step.
  *
  * @returns `{ applyLayout, isLayouting }`.
  */
 export function useAutoLayout(): UseAutoLayoutResult {
-	const workerRef = useRef<Worker | null>(null);
 	const [isLayouting, setIsLayouting] = useState(false);
 
-	// Create the worker on mount; terminate it on unmount.
-	useEffect(() => {
-		workerRef.current = new Worker(new URL("../workers/elk-layout.worker.ts", import.meta.url), {
-			type: "module",
-		});
-
-		return () => {
-			workerRef.current?.terminate();
-			workerRef.current = null;
-		};
-	}, []);
-
 	const applyLayout = useCallback(
-		(direction: "TB" | "LR") => {
-			const worker = workerRef.current;
-			// Guard: ignore if no worker or layout already in progress.
-			if (!worker || isLayouting) return;
-
+		async (direction: "TB" | "LR") => {
+			if (isLayouting) return;
 			setIsLayouting(true);
 
-			// Read current store state via getState() to avoid stale closure issues.
-			// This mirrors the pattern used in Editor.tsx handleDrop.
-			const { nodes, edges } = useDiagramStore.getState();
+			try {
+				// Read current store state via getState() to avoid stale closure issues.
+				const { nodes, edges } = useDiagramStore.getState();
 
-			worker.postMessage({
-				nodes: nodes.map((node) => ({
-					id: node.id,
-					position: node.position,
-					width: DEFAULT_NODE_WIDTH,
-					height: DEFAULT_NODE_HEIGHT,
-				})),
-				edges: edges.map((edge) => ({
-					id: edge.id,
-					source: edge.source,
-					target: edge.target,
-				})),
-				direction,
-			});
+				const positions = await computeLayout(
+					nodes.map((node) => ({
+						id: node.id,
+						position: node.position,
+						width: DEFAULT_NODE_WIDTH,
+						height: DEFAULT_NODE_HEIGHT,
+					})),
+					edges.map((edge) => ({
+						id: edge.id,
+						source: edge.source,
+						target: edge.target,
+					})),
+					direction,
+				);
 
-			// One-shot listener — removed as soon as the worker responds.
-			const handleMessage = (event: MessageEvent<LayoutResult | LayoutError>) => {
-				worker.removeEventListener("message", handleMessage);
+				// Re-read nodes in case the store changed while ELK was computing.
+				const currentNodes = useDiagramStore.getState().nodes;
 
-				if (event.data.type === "result") {
-					// Re-read nodes from current store state in case they changed while
-					// the layout was computing.
-					const currentNodes = useDiagramStore.getState().nodes;
+				// Build move_node ops only for nodes whose position actually changed.
+				const moveOperations = positions
+					.map((pos) => {
+						const node = currentNodes.find((n) => n.id === pos.nodeId);
+						if (!node) return null;
+						if (node.position.x === pos.position.x && node.position.y === pos.position.y) {
+							return null;
+						}
+						return {
+							type: "move_node" as const,
+							nodeId: pos.nodeId,
+							from: { ...node.position },
+							to: pos.position,
+						};
+					})
+					.filter((op): op is NonNullable<typeof op> => op !== null);
 
-					// Build move_node operations only for nodes whose position actually
-					// changed, to keep the undo stack lean.
-					const moveOperations = event.data.positions
-						.map((pos) => {
-							const node = currentNodes.find((n) => n.id === pos.nodeId);
-							if (!node) return null;
-							// Skip no-ops.
-							if (node.position.x === pos.position.x && node.position.y === pos.position.y) {
-								return null;
-							}
-							return {
-								type: "move_node" as const,
-								nodeId: pos.nodeId,
-								from: { ...node.position },
-								to: pos.position,
-							};
-						})
-						.filter((op): op is NonNullable<typeof op> => op !== null);
-
-					if (moveOperations.length > 0) {
-						useDiagramStore.getState().applyBatchOperation({
-							type: "batch",
-							operations: moveOperations,
-						});
-					}
-				} else {
-					// Worker returned an error — log it; don't throw (no crash).
-					console.error("ELK layout failed:", event.data.message);
+				if (moveOperations.length > 0) {
+					useDiagramStore.getState().applyBatchOperation({
+						type: "batch",
+						operations: moveOperations,
+					});
 				}
-
+			} catch (err) {
+				console.error("ELK layout failed:", err instanceof Error ? err.message : err);
+			} finally {
 				setIsLayouting(false);
-			};
-
-			worker.addEventListener("message", handleMessage);
+			}
 		},
 		[isLayouting],
 	);

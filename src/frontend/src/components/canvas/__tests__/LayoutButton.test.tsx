@@ -86,8 +86,8 @@ describe("LayoutButton", () => {
 
 		const button = screen.getByRole("button", { name: /auto-layout/i });
 		expect(button).toBeDisabled();
-		// The text changes from "Layout" to "Layouting..."
-		expect(screen.getByText(/layouting/i)).toBeInTheDocument();
+		// The text changes from "Layout" to "Formatting..."
+		expect(screen.getByText(/formatting/i)).toBeInTheDocument();
 	});
 
 	it("button is enabled when isLayouting is false", () => {
