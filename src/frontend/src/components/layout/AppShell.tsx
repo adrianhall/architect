@@ -60,7 +60,7 @@ export function AppShell() {
 			{/* Content area */}
 			<div className="flex flex-1 overflow-hidden">
 				{/* Sidebar placeholder — will be populated in ISSUE-15 (service palette) */}
-				<main className="flex-1 overflow-auto p-4">
+				<main className="flex-1 overflow-auto">
 					<Outlet />
 				</main>
 			</div>

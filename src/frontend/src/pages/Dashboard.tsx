@@ -42,7 +42,7 @@ export function Dashboard() {
 	};
 
 	return (
-		<div className="mx-auto max-w-6xl">
+		<div className="mx-auto max-w-6xl p-4">
 			{/* Page header */}
 			<div className="mb-6 flex items-center justify-between">
 				<div>

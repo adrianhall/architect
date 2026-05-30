@@ -28,7 +28,7 @@ export function Admin() {
 	const { user } = useAuth();
 
 	return (
-		<div>
+		<div className="p-4">
 			<h1 className="text-2xl font-bold">Admin</h1>
 			{user !== null && <p className="mt-2 text-muted-foreground">Admin user: {user.email}</p>}
 		</div>
