@@ -10,6 +10,8 @@ import {
 } from "@xyflow/react";
 import { ulid } from "ulid";
 import { create } from "zustand";
+import type { Position } from "./operations";
+import { applyOperation, type Operation, reverseOperation } from "./operations";
 
 /**
  * Default viewport state — origin with 100% zoom.
@@ -20,11 +22,20 @@ import { create } from "zustand";
 const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
 
 /**
+ * Default maximum number of undo steps retained in the history stack.
+ *
+ * Satisfies F4-US8 which requires at least 50 undoable steps. When the
+ * stack exceeds this limit, the oldest entry is discarded.
+ */
+const DEFAULT_MAX_UNDO_STEPS = 50;
+
+/**
  * Shape of the Zustand diagram store.
  *
- * Owns all canvas state: nodes, edges, and viewport. Provides React Flow
- * change handlers and imperative mutation actions used by keyboard shortcuts,
- * palette drag-drop, connection handling, and the auto-save layer.
+ * Owns all canvas state: nodes, edges, viewport, and undo/redo history.
+ * Provides React Flow change handlers and imperative mutation actions used
+ * by keyboard shortcuts, palette drag-drop, connection handling, and the
+ * auto-save layer.
  */
 interface DiagramState {
 	/** All nodes currently on the canvas. */
@@ -35,11 +46,37 @@ interface DiagramState {
 	viewport: Viewport;
 
 	/**
+	 * History stack for undo operations. The last entry is the most recently
+	 * applied operation and is the first to be undone. Capped at
+	 * `maxUndoSteps` entries; oldest entries are discarded when the cap is
+	 * exceeded.
+	 */
+	undoStack: Operation[];
+
+	/**
+	 * History stack for redo operations. Populated when operations are undone.
+	 * Cleared whenever a new mutating action is performed.
+	 */
+	redoStack: Operation[];
+
+	/**
+	 * Maximum number of operations retained in the undo stack.
+	 *
+	 * Defaults to 50 (satisfying F4-US8). Configurable to allow tests to use
+	 * smaller values without excessive setup.
+	 */
+	maxUndoSteps: number;
+
+	/**
 	 * React Flow change handler for nodes.
 	 *
 	 * Must be passed directly to the `onNodesChange` prop of `<ReactFlow>`.
 	 * Delegates to React Flow's `applyNodeChanges` utility which handles
 	 * position, selection, dimension, and removal changes from the canvas.
+	 *
+	 * This handler does NOT push undo operations — position changes during a
+	 * drag are handled continuously by React Flow and are not individually
+	 * undoable. Use `moveNode` on drag stop to record a single position change.
 	 *
 	 * @param changes - Array of `NodeChange` objects emitted by React Flow.
 	 */
@@ -52,12 +89,14 @@ interface DiagramState {
 	 * Delegates to React Flow's `applyEdgeChanges` utility which handles
 	 * selection and removal changes.
 	 *
+	 * This handler does NOT push undo operations.
+	 *
 	 * @param changes - Array of `EdgeChange` objects emitted by React Flow.
 	 */
 	onEdgesChange: (changes: EdgeChange[]) => void;
 
 	/**
-	 * Appends a single node to the canvas.
+	 * Appends a single node to the canvas and records an undo operation.
 	 *
 	 * Used by the palette drop handler (ISSUE-15) to place a dragged service
 	 * onto the canvas.
@@ -70,39 +109,46 @@ interface DiagramState {
 	 * Clears the `selected` flag on every node currently in the store.
 	 *
 	 * Used by the palette drop handler before adding a newly dropped node so
-	 * that only the freshly placed node ends up selected. Mutating `selected`
-	 * directly (rather than via `onNodesChange` / `applyNodeChanges`) avoids
-	 * a dependency on the React Flow utility and works correctly in tests where
-	 * `applyNodeChanges` is replaced with a no-op mock.
+	 * that only the freshly placed node ends up selected. This action does NOT
+	 * push an undo operation — selection state is not undoable.
+	 *
+	 * Mutating `selected` directly (rather than via `onNodesChange` /
+	 * `applyNodeChanges`) avoids a dependency on the React Flow utility and
+	 * works correctly in tests where `applyNodeChanges` is replaced with a
+	 * no-op mock.
 	 */
 	deselectAllNodes: () => void;
 
 	/**
-	 * Removes one or more nodes from the canvas by their IDs.
+	 * Removes one or more nodes from the canvas and records an undo operation.
 	 *
 	 * Also removes any edges whose `source` or `target` matches a removed
-	 * node, preventing orphaned connections.
+	 * node, preventing orphaned connections. When multiple IDs are provided,
+	 * all removals are bundled into a single `batch` operation so they undo
+	 * as one step.
 	 *
 	 * @param ids - Array of node IDs to remove.
 	 */
 	removeNodes: (ids: string[]) => void;
 
 	/**
-	 * Removes one or more edges from the canvas by their IDs.
+	 * Removes one or more edges from the canvas and records an undo operation.
 	 *
-	 * Nodes are not affected.
+	 * When multiple IDs are provided, all removals are bundled into a single
+	 * `batch` operation so they undo as one step. Nodes are not affected.
 	 *
 	 * @param ids - Array of edge IDs to remove.
 	 */
 	removeEdges: (ids: string[]) => void;
 
 	/**
-	 * Appends a single, fully constructed edge to the canvas.
+	 * Appends a single, fully constructed edge to the canvas and records an
+	 * undo operation.
 	 *
 	 * Unlike `onConnect` (which creates a new edge from a React Flow
 	 * `Connection` object), `addEdge` accepts a pre-built `Edge` and is used
 	 * for programmatic edge insertion — for example, by the undo/redo system
-	 * (ISSUE-17) re-applying a previously deleted edge.
+	 * re-applying a previously deleted edge.
 	 *
 	 * @param edge - A fully constructed React Flow `Edge` to add.
 	 */
@@ -119,6 +165,9 @@ interface DiagramState {
 	 * If `edgeId` does not exist in the current edges array the call is a
 	 * no-op — no error is thrown and the edges array is not mutated.
 	 *
+	 * This action does NOT push an undo operation. Use `updateEdgeData` for
+	 * tracked data-field changes.
+	 *
 	 * @param edgeId - The `id` of the edge to update.
 	 * @param updates - Partial edge fields to merge onto the existing edge.
 	 *
@@ -131,7 +180,7 @@ interface DiagramState {
 
 	/**
 	 * Deeply merges updates into the `data` object of a node identified by
-	 * `nodeId`.
+	 * `nodeId` and records an undo operation.
 	 *
 	 * Only the keys present in `dataUpdates` are overwritten; all other keys
 	 * on the existing `node.data` object are preserved. This is the correct
@@ -155,7 +204,7 @@ interface DiagramState {
 
 	/**
 	 * Deeply merges updates into the `data` object of an edge identified by
-	 * `edgeId`.
+	 * `edgeId` and records an undo operation.
 	 *
 	 * Only the keys present in `dataUpdates` are overwritten; all other keys
 	 * on the existing `edge.data` object are preserved. This is the correct
@@ -182,7 +231,7 @@ interface DiagramState {
 
 	/**
 	 * React Flow connection handler — creates a new `data-flow` edge when the
-	 * user drags from one node handle to another.
+	 * user drags from one node handle to another and records an undo operation.
 	 *
 	 * Must be passed directly to the `onConnect` prop of `<ReactFlow>`. React
 	 * Flow calls this handler only when a valid connection is completed (i.e.
@@ -193,18 +242,88 @@ interface DiagramState {
 	 * New edges always receive a ULID `id` and default to `type: "data-flow"`.
 	 * Users can change the type via the properties panel (ISSUE-16).
 	 *
+	 * Routes through `addEdge` internally so the operation is tracked in the
+	 * undo stack.
+	 *
 	 * @param connection - The `Connection` object emitted by React Flow,
 	 *   containing `source`, `target`, `sourceHandle`, and `targetHandle`.
 	 */
 	onConnect: (connection: Connection) => void;
 
 	/**
+	 * Records a node move operation after a drag completes.
+	 *
+	 * Called by the `onNodeDragStop` handler in `Editor.tsx` with the node's
+	 * position before and after the drag. Creates a `move_node` operation and
+	 * pushes it onto the undo stack. The visual movement during the drag is
+	 * handled by React Flow's `onNodesChange` (which does not push operations);
+	 * this action only updates the canonical position in the store and records
+	 * the change for undo.
+	 *
+	 * If `from` and `to` are identical, the call is a no-op (no operation is
+	 * pushed and no re-render occurs).
+	 *
+	 * @param nodeId - ID of the node that was moved.
+	 * @param from - Canvas position at the start of the drag.
+	 * @param to - Canvas position at the end of the drag.
+	 *
+	 * @example
+	 * ```ts
+	 * // Called from onNodeDragStop:
+	 * useDiagramStore.getState().moveNode(node.id, dragStart, node.position);
+	 * ```
+	 */
+	moveNode: (nodeId: string, from: Position, to: Position) => void;
+
+	/**
+	 * Undoes the last operation pushed onto the undo stack.
+	 *
+	 * Pops the most recent operation from `undoStack`, computes its reverse
+	 * via `reverseOperation`, applies it to the current canvas state, and
+	 * pushes the original operation onto `redoStack` for potential redo.
+	 *
+	 * If the undo stack is empty this is a no-op — no error is thrown and
+	 * no state is changed.
+	 */
+	undo: () => void;
+
+	/**
+	 * Re-applies the last undone operation from the redo stack.
+	 *
+	 * Pops the most recent operation from `redoStack`, applies it to the
+	 * current canvas state, and pushes it back onto `undoStack`.
+	 *
+	 * If the redo stack is empty this is a no-op — no error is thrown and
+	 * no state is changed.
+	 */
+	redo: () => void;
+
+	/**
+	 * Returns `true` when there is at least one operation on the undo stack.
+	 *
+	 * Use to enable/disable the Undo toolbar button or menu item.
+	 *
+	 * @returns `true` if `undoStack` is non-empty, `false` otherwise.
+	 */
+	canUndo: () => boolean;
+
+	/**
+	 * Returns `true` when there is at least one operation on the redo stack.
+	 *
+	 * Use to enable/disable the Redo toolbar button or menu item.
+	 *
+	 * @returns `true` if `redoStack` is non-empty, `false` otherwise.
+	 */
+	canRedo: () => boolean;
+
+	/**
 	 * Replaces the entire diagram state with the provided nodes, edges, and
-	 * optional viewport.
+	 * optional viewport, and clears both undo and redo stacks.
 	 *
 	 * Used by the Editor to hydrate the canvas when API data loads. If no
 	 * `viewport` is provided, falls back to `DEFAULT_VIEWPORT`
-	 * (`{ x: 0, y: 0, zoom: 1 }`).
+	 * (`{ x: 0, y: 0, zoom: 1 }`). Loading a new diagram resets history so
+	 * actions from a previous diagram cannot be undone in the new one.
 	 *
 	 * @param nodes - Replacement node array.
 	 * @param edges - Replacement edge array.
@@ -220,12 +339,49 @@ interface DiagramState {
 }
 
 /**
+ * Appends an operation to the undo stack, enforces the stack size cap, and
+ * clears the redo stack.
+ *
+ * This function is intentionally NOT part of the public `DiagramState`
+ * interface — it is an internal helper called by every mutating action. It
+ * encapsulates the three invariants that must hold after any user-initiated
+ * change:
+ *
+ * 1. The new operation is recorded at the top of the undo stack.
+ * 2. Any redo history is invalidated (new action breaks the redo branch).
+ * 3. The undo stack never exceeds `maxUndoSteps`; the oldest entry is
+ *    dropped when the limit is exceeded.
+ *
+ * @param set - Zustand `set` function for updating store state.
+ * @param get - Zustand `get` function for reading current store state.
+ * @param op - The operation to push onto the undo stack.
+ */
+function pushUndoOperation(
+	set: (partial: Partial<DiagramState>) => void,
+	get: () => DiagramState,
+	op: Operation,
+): void {
+	const { undoStack, maxUndoSteps } = get();
+	const newStack = [...undoStack, op];
+	// Cap the stack: discard oldest entries when limit exceeded.
+	if (newStack.length > maxUndoSteps) {
+		newStack.splice(0, newStack.length - maxUndoSteps);
+	}
+	set({ undoStack: newStack, redoStack: [] });
+}
+
+/**
  * Zustand store that owns all canvas state for the architecture editor.
  *
  * Provides React Flow-compatible change handlers (`onNodesChange`,
  * `onEdgesChange`, `onConnect`) and imperative mutation actions (`addNode`,
  * `removeNodes`, `removeEdges`, `addEdge`, `updateEdge`, `updateNodeData`,
- * `updateEdgeData`, `setDiagram`).
+ * `updateEdgeData`, `moveNode`, `setDiagram`, `undo`, `redo`).
+ *
+ * All mutating actions (add, remove, move, update) push an `Operation` onto
+ * the undo stack so they can be reversed with `undo()`. The undo stack is
+ * capped at `maxUndoSteps` (default 50) entries. Any new action clears the
+ * redo stack.
  *
  * Use selector functions to subscribe to individual slices so that components
  * only re-render when the slice they care about changes:
@@ -240,6 +396,9 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 	nodes: [],
 	edges: [],
 	viewport: DEFAULT_VIEWPORT,
+	undoStack: [],
+	redoStack: [],
+	maxUndoSteps: DEFAULT_MAX_UNDO_STEPS,
 
 	onNodesChange: (changes) => {
 		set({ nodes: applyNodeChanges(changes, get().nodes) });
@@ -250,7 +409,9 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 	},
 
 	addNode: (node) => {
+		const op: Operation = { type: "add_node", node };
 		set({ nodes: [...get().nodes, node] });
+		pushUndoOperation(set, get, op);
 	},
 
 	deselectAllNodes: () => {
@@ -262,20 +423,64 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 
 	removeNodes: (ids) => {
 		const idSet = new Set(ids);
+		const { nodes, edges } = get();
+
+		// Build individual remove_node operations.
+		// Each connected edge is assigned to the FIRST node that references it so
+		// that deduplication is correct when multiple removed nodes share an edge.
+		// Without this, reversing the batch would restore the shared edge twice.
+		const assignedEdgeIds = new Set<string>();
+		const ops: Operation[] = ids
+			.map((id) => {
+				const node = nodes.find((n) => n.id === id);
+				if (!node) return null;
+				const connectedEdges = edges.filter((e) => (e.source === id || e.target === id) && !assignedEdgeIds.has(e.id));
+				for (const e of connectedEdges) {
+					assignedEdgeIds.add(e.id);
+				}
+				return { type: "remove_node" as const, node, connectedEdges };
+			})
+			.filter((op): op is Extract<Operation, { type: "remove_node" }> => op !== null);
+
+		// Apply the removal.
 		set({
-			nodes: get().nodes.filter((n) => !idSet.has(n.id)),
-			// Remove any edges connected to the removed nodes to avoid orphaned connections.
-			edges: get().edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
+			nodes: nodes.filter((n) => !idSet.has(n.id)),
+			edges: edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
 		});
+
+		if (ops.length === 0) return;
+
+		// Wrap multiple operations in a batch so they undo as a single step.
+		const op: Operation = ops.length === 1 ? ops[0] : { type: "batch", operations: ops };
+		pushUndoOperation(set, get, op);
 	},
 
 	removeEdges: (ids) => {
 		const idSet = new Set(ids);
-		set({ edges: get().edges.filter((e) => !idSet.has(e.id)) });
+		const { edges } = get();
+
+		// Build individual remove_edge operations.
+		const ops: Operation[] = ids
+			.map((id) => {
+				const edge = edges.find((e) => e.id === id);
+				if (!edge) return null;
+				return { type: "remove_edge" as const, edge };
+			})
+			.filter((op): op is Extract<Operation, { type: "remove_edge" }> => op !== null);
+
+		set({ edges: edges.filter((e) => !idSet.has(e.id)) });
+
+		if (ops.length === 0) return;
+
+		// Wrap multiple operations in a batch so they undo as a single step.
+		const op: Operation = ops.length === 1 ? ops[0] : { type: "batch", operations: ops };
+		pushUndoOperation(set, get, op);
 	},
 
 	addEdge: (edge) => {
+		const op: Operation = { type: "add_edge", edge };
 		set({ edges: [...get().edges, edge] });
+		pushUndoOperation(set, get, op);
 	},
 
 	updateEdge: (edgeId, updates) => {
@@ -285,15 +490,41 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 	},
 
 	updateNodeData: (nodeId, dataUpdates) => {
+		const { nodes } = get();
+		const node = nodes.find((n) => n.id === nodeId);
+		if (!node) return;
+
+		const fromData = { ...node.data } as Record<string, unknown>;
+		const op: Operation = {
+			type: "update_node_data",
+			nodeId,
+			from: fromData,
+			to: dataUpdates,
+		};
+
 		set({
-			nodes: get().nodes.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...dataUpdates } } : n)),
+			nodes: nodes.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...dataUpdates } } : n)),
 		});
+		pushUndoOperation(set, get, op);
 	},
 
 	updateEdgeData: (edgeId, dataUpdates) => {
+		const { edges } = get();
+		const edge = edges.find((e) => e.id === edgeId);
+		if (!edge) return;
+
+		const fromData = { ...(edge.data ?? {}) } as Record<string, unknown>;
+		const op: Operation = {
+			type: "update_edge_data",
+			edgeId,
+			from: fromData,
+			to: dataUpdates,
+		};
+
 		set({
-			edges: get().edges.map((e) => (e.id === edgeId ? { ...e, data: { ...e.data, ...dataUpdates } } : e)),
+			edges: edges.map((e) => (e.id === edgeId ? { ...e, data: { ...e.data, ...dataUpdates } } : e)),
 		});
+		pushUndoOperation(set, get, op);
 	},
 
 	onConnect: (connection) => {
@@ -319,10 +550,64 @@ export const useDiagramStore = create<DiagramState>((set, get) => ({
 			data: {},
 		};
 
-		set({ edges: [...get().edges, newEdge] });
+		// Route through addEdge so the operation is tracked in the undo stack.
+		get().addEdge(newEdge);
 	},
 
+	moveNode: (nodeId, from, to) => {
+		// No-op if position unchanged.
+		if (from.x === to.x && from.y === to.y) return;
+
+		const op: Operation = { type: "move_node", nodeId, from, to };
+
+		set({
+			nodes: get().nodes.map((n) => (n.id === nodeId ? { ...n, position: to } : n)),
+		});
+		pushUndoOperation(set, get, op);
+	},
+
+	undo: () => {
+		const { undoStack, redoStack, nodes, edges } = get();
+		if (undoStack.length === 0) return;
+
+		const lastOp = undoStack[undoStack.length - 1];
+		const reverseOp = reverseOperation(lastOp);
+		const newState = applyOperation(nodes, edges, reverseOp);
+
+		set({
+			nodes: newState.nodes,
+			edges: newState.edges,
+			undoStack: undoStack.slice(0, -1),
+			redoStack: [...redoStack, lastOp],
+		});
+	},
+
+	redo: () => {
+		const { undoStack, redoStack, nodes, edges } = get();
+		if (redoStack.length === 0) return;
+
+		const lastOp = redoStack[redoStack.length - 1];
+		const newState = applyOperation(nodes, edges, lastOp);
+
+		set({
+			nodes: newState.nodes,
+			edges: newState.edges,
+			undoStack: [...undoStack, lastOp],
+			redoStack: redoStack.slice(0, -1),
+		});
+	},
+
+	canUndo: () => get().undoStack.length > 0,
+
+	canRedo: () => get().redoStack.length > 0,
+
 	setDiagram: (nodes, edges, viewport) => {
-		set({ nodes, edges, viewport: viewport ?? DEFAULT_VIEWPORT });
+		set({
+			nodes,
+			edges,
+			viewport: viewport ?? DEFAULT_VIEWPORT,
+			undoStack: [],
+			redoStack: [],
+		});
 	},
 }));

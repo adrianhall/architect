@@ -46,7 +46,13 @@ vi.mock("@xyflow/react", () => ({
 
 /** Resets the diagram store to its empty initial state. */
 function resetStore() {
-	useDiagramStore.setState({ nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+	useDiagramStore.setState({
+		nodes: [],
+		edges: [],
+		viewport: { x: 0, y: 0, zoom: 1 },
+		undoStack: [],
+		redoStack: [],
+	});
 }
 
 /** Mock API responses returned for every fetch during Editor tests. */
@@ -286,5 +292,149 @@ describe("Editor", () => {
 		fireKeyDown("f", { shiftKey: true, metaKey: true });
 
 		expect(mockFitView).toHaveBeenCalledWith({ padding: 0.1 });
+	});
+
+	// ── Undo / Redo keyboard shortcuts ─────────────────────────────────────────
+
+	it("Ctrl+Z calls undo on the diagram store", async () => {
+		renderEditor();
+		await waitFor(() => screen.getByTestId("reactflow"));
+
+		// Add a node so there's something to undo, then verify undo is called.
+		await waitForCanvasAndSeed(() => {
+			useDiagramStore.getState().addNode({
+				id: "n1",
+				type: "cloudflareService",
+				position: { x: 0, y: 0 },
+				data: {},
+			});
+		});
+
+		expect(useDiagramStore.getState().nodes).toHaveLength(1);
+
+		fireKeyDown("z", { ctrlKey: true });
+
+		// Undo should have removed the node.
+		expect(useDiagramStore.getState().nodes).toHaveLength(0);
+	});
+
+	it("Cmd+Z (metaKey) calls undo on the diagram store", async () => {
+		renderEditor();
+		await waitFor(() => screen.getByTestId("reactflow"));
+
+		await waitForCanvasAndSeed(() => {
+			useDiagramStore.getState().addNode({
+				id: "n1",
+				type: "cloudflareService",
+				position: { x: 0, y: 0 },
+				data: {},
+			});
+		});
+
+		fireKeyDown("z", { metaKey: true });
+
+		expect(useDiagramStore.getState().nodes).toHaveLength(0);
+	});
+
+	it("Ctrl+Shift+Z calls redo on the diagram store", async () => {
+		renderEditor();
+		await waitFor(() => screen.getByTestId("reactflow"));
+
+		await waitForCanvasAndSeed(() => {
+			useDiagramStore.getState().addNode({
+				id: "n1",
+				type: "cloudflareService",
+				position: { x: 0, y: 0 },
+				data: {},
+			});
+		});
+
+		// Undo first to create a redo entry.
+		useDiagramStore.getState().undo();
+		expect(useDiagramStore.getState().nodes).toHaveLength(0);
+
+		// Now redo should restore the node.
+		fireKeyDown("z", { ctrlKey: true, shiftKey: true });
+
+		expect(useDiagramStore.getState().nodes).toHaveLength(1);
+	});
+
+	it("Ctrl+Y calls redo on the diagram store (Windows convention)", async () => {
+		renderEditor();
+		await waitFor(() => screen.getByTestId("reactflow"));
+
+		await waitForCanvasAndSeed(() => {
+			useDiagramStore.getState().addNode({
+				id: "n1",
+				type: "cloudflareService",
+				position: { x: 0, y: 0 },
+				data: {},
+			});
+		});
+
+		// Undo first to create a redo entry.
+		useDiagramStore.getState().undo();
+		expect(useDiagramStore.getState().nodes).toHaveLength(0);
+
+		// Ctrl+Y redo.
+		fireKeyDown("y", { ctrlKey: true });
+
+		expect(useDiagramStore.getState().nodes).toHaveLength(1);
+	});
+
+	// ── Text-input guard — refined to allow non-text inputs ────────────────────
+
+	it("Ctrl+Z does NOT trigger undo when focus is inside a text <input>", async () => {
+		renderEditor();
+		await waitFor(() => screen.getByTestId("reactflow"));
+
+		await waitForCanvasAndSeed(() => {
+			useDiagramStore.getState().addNode({
+				id: "n1",
+				type: "cloudflareService",
+				position: { x: 0, y: 0 },
+				data: {},
+			});
+		});
+
+		// Focus a text input — undo should not fire.
+		const input = document.createElement("input");
+		input.type = "text";
+		document.body.appendChild(input);
+		input.focus();
+
+		fireKeyDown("z", { ctrlKey: true }, input);
+
+		// Node should still be there (undo was suppressed).
+		expect(useDiagramStore.getState().nodes).toHaveLength(1);
+
+		document.body.removeChild(input);
+	});
+
+	it("Ctrl+Z DOES trigger undo when focus is on a checkbox (non-text input)", async () => {
+		renderEditor();
+		await waitFor(() => screen.getByTestId("reactflow"));
+
+		await waitForCanvasAndSeed(() => {
+			useDiagramStore.getState().addNode({
+				id: "n1",
+				type: "cloudflareService",
+				position: { x: 0, y: 0 },
+				data: {},
+			});
+		});
+
+		// Focus a checkbox input — undo should fire (non-text input does not block).
+		const checkbox = document.createElement("input");
+		checkbox.type = "checkbox";
+		document.body.appendChild(checkbox);
+		checkbox.focus();
+
+		fireKeyDown("z", { ctrlKey: true }, checkbox);
+
+		// Undo should have removed the node.
+		expect(useDiagramStore.getState().nodes).toHaveLength(0);
+
+		document.body.removeChild(checkbox);
 	});
 });

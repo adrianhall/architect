@@ -23,13 +23,15 @@ const mockFitView = vi.fn();
 /**
  * Captured handler references, updated each time the ReactFlow mock renders.
  *
- * Tests that need to trigger selection events call these functions directly
- * after the canvas has mounted. This approach avoids trying to fire synthetic
- * React events on internal React Flow internals.
+ * Tests that need to trigger selection or drag events call these functions
+ * directly after the canvas has mounted. This approach avoids trying to fire
+ * synthetic React events on internal React Flow internals.
  */
 const capturedHandlers: {
 	onSelectionChange?: (params: { nodes: { id: string }[]; edges: { id: string }[] }) => void;
 	onPaneClick?: () => void;
+	onNodeDragStart?: (event: React.MouseEvent, node: { id: string; position: { x: number; y: number } }) => void;
+	onNodeDragStop?: (event: React.MouseEvent, node: { id: string; position: { x: number; y: number } }) => void;
 } = {};
 
 /**
@@ -47,10 +49,14 @@ vi.mock("@xyflow/react", () => ({
 		onDragOver?: React.DragEventHandler;
 		onSelectionChange?: (params: { nodes: { id: string }[]; edges: { id: string }[] }) => void;
 		onPaneClick?: () => void;
+		onNodeDragStart?: (event: React.MouseEvent, node: { id: string; position: { x: number; y: number } }) => void;
+		onNodeDragStop?: (event: React.MouseEvent, node: { id: string; position: { x: number; y: number } }) => void;
 	}) => {
-		// Capture selection handlers for use in test assertions.
+		// Capture selection and drag handlers for use in test assertions.
 		capturedHandlers.onSelectionChange = props.onSelectionChange;
 		capturedHandlers.onPaneClick = props.onPaneClick;
+		capturedHandlers.onNodeDragStart = props.onNodeDragStart;
+		capturedHandlers.onNodeDragStop = props.onNodeDragStop;
 
 		return (
 			<div data-testid="reactflow" role="application" onDrop={props.onDrop} onDragOver={props.onDragOver}>
@@ -79,7 +85,13 @@ vi.mock("@xyflow/react", () => ({
 
 /** Resets both diagram and UI stores to their initial empty state. */
 function resetStores() {
-	useDiagramStore.setState({ nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } });
+	useDiagramStore.setState({
+		nodes: [],
+		edges: [],
+		viewport: { x: 0, y: 0, zoom: 1 },
+		undoStack: [],
+		redoStack: [],
+	});
 	useUIStore.setState({
 		collapsedCategories: new Set(),
 		selectedNodeId: null,
@@ -202,6 +214,8 @@ describe("EditorDrop", () => {
 		mockScreenToFlowPosition.mockClear().mockReturnValue({ x: 100, y: 200 });
 		capturedHandlers.onSelectionChange = undefined;
 		capturedHandlers.onPaneClick = undefined;
+		capturedHandlers.onNodeDragStart = undefined;
+		capturedHandlers.onNodeDragStop = undefined;
 		vi.restoreAllMocks();
 		setupFetch();
 	});
@@ -422,5 +436,73 @@ describe("EditorDrop", () => {
 
 		expect(useUIStore.getState().selectedNodeId).toBeNull();
 		expect(useUIStore.getState().selectedEdgeId).toBeNull();
+	});
+
+	// ── Node drag handlers ─────────────────────────────────────────────────────
+
+	it("onNodeDragStart is wired to the ReactFlow component", async () => {
+		renderEditor();
+		await waitForCanvas();
+
+		expect(capturedHandlers.onNodeDragStart).toBeDefined();
+	});
+
+	it("onNodeDragStop is wired to the ReactFlow component", async () => {
+		renderEditor();
+		await waitForCanvas();
+
+		expect(capturedHandlers.onNodeDragStop).toBeDefined();
+	});
+
+	it("onNodeDragStop records a moveNode operation when node position changed", async () => {
+		renderEditor();
+		await waitForCanvas();
+
+		// Seed a node into the store.
+		useDiagramStore.setState({
+			nodes: [
+				{
+					id: "n1",
+					type: "cloudflareService",
+					position: { x: 0, y: 0 },
+					data: {},
+				},
+			],
+			edges: [],
+			undoStack: [],
+			redoStack: [],
+		});
+
+		// Simulate drag start at (0, 0).
+		capturedHandlers.onNodeDragStart?.({} as React.MouseEvent, { id: "n1", position: { x: 0, y: 0 } });
+
+		// Simulate drag stop at (50, 80).
+		capturedHandlers.onNodeDragStop?.({} as React.MouseEvent, { id: "n1", position: { x: 50, y: 80 } });
+
+		// A moveNode operation should be on the undo stack.
+		expect(useDiagramStore.getState().undoStack).toHaveLength(1);
+		expect(useDiagramStore.getState().undoStack[0].type).toBe("move_node");
+		// The node position should reflect the moved position.
+		expect(useDiagramStore.getState().nodes[0].position).toEqual({ x: 50, y: 80 });
+	});
+
+	it("onNodeDragStop does NOT push an operation when position is unchanged", async () => {
+		renderEditor();
+		await waitForCanvas();
+
+		useDiagramStore.setState({
+			nodes: [{ id: "n1", type: "cloudflareService", position: { x: 10, y: 20 }, data: {} }],
+			edges: [],
+			undoStack: [],
+			redoStack: [],
+		});
+
+		// Simulate drag start and stop at the same position.
+		capturedHandlers.onNodeDragStart?.({} as React.MouseEvent, { id: "n1", position: { x: 10, y: 20 } });
+
+		capturedHandlers.onNodeDragStop?.({} as React.MouseEvent, { id: "n1", position: { x: 10, y: 20 } });
+
+		// No operation should have been recorded.
+		expect(useDiagramStore.getState().undoStack).toHaveLength(0);
 	});
 });

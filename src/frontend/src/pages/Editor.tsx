@@ -9,7 +9,7 @@ import {
 	ReactFlowProvider,
 	useReactFlow,
 } from "@xyflow/react";
-import { type DragEvent, useCallback, useEffect } from "react";
+import { type DragEvent, useCallback, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { ulid } from "ulid";
 import { useCatalog, useDiagram } from "@/api";
@@ -19,6 +19,7 @@ import { toReactFlowEdge, toReactFlowNode } from "@/components/canvas/utils";
 import { ServicePalette } from "@/components/palette/ServicePalette";
 import PropertiesPanel from "@/components/panels/PropertiesPanel";
 import { useDiagramStore } from "@/stores/diagram";
+import type { Position } from "@/stores/operations";
 import { useUIStore } from "@/stores/ui";
 
 /**
@@ -30,16 +31,24 @@ import { useUIStore } from "@/stores/ui";
  * - Hydrates the Zustand diagram store when both datasets arrive.
  * - Renders `<ReactFlow>` with `<MiniMap>`, `<Controls>`, and a dotted
  *   `<Background>` grid.
- * - Attaches global keyboard shortcuts: Delete/Backspace (remove selected
- *   nodes/edges), `+`/`-` (zoom in/out), `Ctrl+Shift+F` / `Cmd+Shift+F`
- *   (fit view). Shortcuts are suppressed when focus is inside an `<input>`,
- *   `<textarea>`, or a `contenteditable` element.
+ * - Attaches global keyboard shortcuts:
+ *   - Delete/Backspace: remove selected nodes/edges.
+ *   - `+`/`-`: zoom in/out.
+ *   - `Ctrl+Shift+F` / `Cmd+Shift+F`: fit view.
+ *   - `Ctrl/Cmd+Z`: undo last operation.
+ *   - `Ctrl/Cmd+Shift+Z`: redo last undone operation.
+ *   - `Ctrl/Cmd+Y`: redo (Windows convention).
+ *   Shortcuts are suppressed when focus is inside a text `<input>`,
+ *   `<textarea>`, or a `contenteditable` element. Non-text inputs
+ *   (`checkbox`, `radio`) do NOT block shortcuts.
  * - Wires the `onConnect` handler from the diagram store so dragging from one
  *   node handle to another creates a new `data-flow` edge with a ULID id.
  *   Self-loop connections are silently rejected by the store.
  * - Provides `onDrop` / `onDragOver` handlers so that services dragged from
  *   the palette sidebar are placed on the canvas as new nodes at the cursor
  *   position.
+ * - Tracks node drag start positions via `onNodeDragStart` and records the
+ *   completed move via `onNodeDragStop`, so node drags are undoable.
  * - Uses `onSelectionChange` (not separate `onNodeClick`/`onEdgeClick`) so
  *   that multi-select is detected correctly: the properties panel is only shown
  *   when exactly one node or one edge is selected.
@@ -75,6 +84,17 @@ function EditorCanvas() {
 	// Show the panel only when exactly one element is selected.
 	const hasSelection = selectedNodeId !== null || selectedEdgeId !== null;
 
+	/**
+	 * Tracks the canvas position of each node at the start of a drag operation.
+	 * Keyed by node ID. Cleared per-node on drag stop.
+	 *
+	 * A ref is used (not state) because drag-start positions are transient
+	 * tracking data that must not trigger re-renders. Using state here would
+	 * cause `onNodeDragStop` to capture a stale closure (the pre-re-render
+	 * function), making it unable to find the start position it just recorded.
+	 */
+	const dragStartPositionsRef = useRef<Map<string, Position>>(new Map());
+
 	// Hydrate the Zustand store when both the diagram and catalog have loaded.
 	useEffect(() => {
 		if (diagram && catalog) {
@@ -88,16 +108,53 @@ function EditorCanvas() {
 	 * Global keyboard shortcut handler.
 	 *
 	 * Guards against text-input focus so that typing in a rename field or
-	 * properties panel does not accidentally delete nodes or zoom the canvas.
+	 * properties panel does not accidentally delete nodes or trigger undo/redo.
+	 * The check is intentionally narrow: only text-type inputs, textareas, and
+	 * contenteditable elements block shortcuts. Non-text inputs (checkbox,
+	 * radio, etc.) pass through so their host components can handle them.
 	 *
 	 * React Flow's built-in `deleteKeyCode` is set to `null` so this handler
 	 * has sole ownership of delete behavior.
+	 *
+	 * Shortcut order (checked first-to-last):
+	 * 1. Undo / Redo (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y) — placed
+	 *    BEFORE delete/zoom so they are never shadowed by other checks.
+	 * 2. Delete / Backspace — remove selected nodes and edges.
+	 * 3. + / = — zoom in.
+	 * 4. - — zoom out.
+	 * 5. Ctrl/Cmd+Shift+F — fit view.
 	 */
 	const handleKeyDown = useCallback(
 		(event: KeyboardEvent) => {
 			// Suppress shortcuts when focus is inside a text entry element.
+			// Refined to allow non-text inputs (checkbox, radio) through.
 			const target = event.target as HTMLElement;
-			if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
+			const isTextInput =
+				(target.tagName === "INPUT" &&
+					["text", "search", "url", "tel", "password", "number", "email"].includes(
+						(target as HTMLInputElement).type,
+					)) ||
+				target.tagName === "TEXTAREA" ||
+				target.isContentEditable;
+
+			if (isTextInput) return;
+
+			const mod = event.metaKey || event.ctrlKey;
+
+			// Undo / Redo — checked first so they are not shadowed.
+			if (mod && event.key === "z" && !event.shiftKey) {
+				event.preventDefault();
+				useDiagramStore.getState().undo();
+				return;
+			}
+			if (mod && event.key === "z" && event.shiftKey) {
+				event.preventDefault();
+				useDiagramStore.getState().redo();
+				return;
+			}
+			if (mod && event.key === "y") {
+				event.preventDefault();
+				useDiagramStore.getState().redo();
 				return;
 			}
 
@@ -139,6 +196,43 @@ function EditorCanvas() {
 		document.addEventListener("keydown", handleKeyDown);
 		return () => document.removeEventListener("keydown", handleKeyDown);
 	}, [handleKeyDown]);
+
+	/**
+	 * Captures the node's canvas position at the start of a drag operation.
+	 *
+	 * Stores the starting position in `dragStartPositionsRef` keyed by the
+	 * node ID so that `onNodeDragStop` can compute the delta and call
+	 * `moveNode`. Writing to a ref does not trigger a re-render (intentional —
+	 * drag positions are transient state that should not cause component
+	 * updates).
+	 *
+	 * @param _event - The mouse event (unused; present for React Flow compatibility).
+	 * @param node - The node being dragged, with its current position.
+	 */
+	const onNodeDragStart = useCallback((_event: React.MouseEvent, node: Node) => {
+		dragStartPositionsRef.current.set(node.id, node.position);
+	}, []);
+
+	/**
+	 * Records the completed node move as an undoable operation.
+	 *
+	 * Called by React Flow after the user releases the mouse button at the end
+	 * of a drag. Reads the start position from `dragStartPositionsRef` (always
+	 * current — refs are not subject to stale closure issues). If the position
+	 * changed, calls `moveNode` to update the store and push the operation onto
+	 * the undo stack. Cleans up the drag start position entry regardless of
+	 * whether the node actually moved.
+	 *
+	 * @param _event - The mouse event (unused; present for React Flow compatibility).
+	 * @param node - The node that was dragged, with its final canvas position.
+	 */
+	const onNodeDragStop = useCallback((_event: React.MouseEvent, node: Node) => {
+		const from = dragStartPositionsRef.current.get(node.id);
+		if (from && (from.x !== node.position.x || from.y !== node.position.y)) {
+			useDiagramStore.getState().moveNode(node.id, from, node.position);
+		}
+		dragStartPositionsRef.current.delete(node.id);
+	}, []);
 
 	/**
 	 * Prevents the browser's default drag-over behavior so the canvas accepts
@@ -282,6 +376,8 @@ function EditorCanvas() {
 					onDragOver={handleDragOver}
 					onSelectionChange={handleSelectionChange}
 					onPaneClick={handlePaneClick}
+					onNodeDragStart={onNodeDragStart}
+					onNodeDragStop={onNodeDragStop}
 					// fitView is intentionally omitted.  React Flow defers fitView
 					// when the node array is empty on mount, then fires it the moment
 					// the first node appears — zooming the canvas all the way into that

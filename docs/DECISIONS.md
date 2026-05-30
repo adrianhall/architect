@@ -509,3 +509,19 @@ This produced two visible bugs:
 **Decision:** Testing `handleNodeClick`, `handleEdgeClick`, and `handlePaneClick` requires triggering React Flow's `onNodeClick`, `onEdgeClick`, and `onPaneClick` callbacks, which are passed as props to the `<ReactFlow>` component. Since the `@xyflow/react` mock replaces `<ReactFlow>` with a simple `<div>`, firing synthetic events on the div would not reach the handlers (React Flow normally invokes them in response to its own internal hit-testing, not native DOM events).
 
 **Resolution:** The `EditorDrop.test.tsx` mock captures the callback props in a module-level `capturedHandlers` object each time the mock component renders. Tests call these captured handlers directly (e.g. `capturedHandlers.onNodeClick?.({} as React.MouseEvent, { id: "node-abc" })`) to exercise the logic without needing to simulate internal React Flow behavior.
+
+---
+
+## ISSUE-17B — Store undo/redo integration + keyboard shortcuts
+
+### `useRef` instead of `useState` for drag start positions
+
+**Decision:** The issue spec uses `useState<Map<string, Position>>` for `dragStartPositions` in `EditorCanvas`. Using `useState` causes a stale closure bug in tests: `onNodeDragStart` calls `setDragStartPositions(...)` which schedules an async React state update. When `onNodeDragStop` is called synchronously after (as the captured handler tests do), it reads the pre-update `dragStartPositions` from its closure because the re-render hasn't happened yet. In production this is also a latent issue since the drag-stop handler was created at the last render, which may not have processed the drag-start state update yet.
+
+**Resolution:** Changed to `useRef<Map<string, Position>>`. Refs are always current — mutating `ref.current` takes effect immediately without triggering a re-render. `onNodeDragStop` reads `dragStartPositionsRef.current` and always sees the latest drag start positions. Both `onNodeDragStart` and `onNodeDragStop` can be stable `useCallback` references with empty dependency arrays.
+
+### Edge deduplication in `removeNodes` batch operations
+
+**Decision:** The issue spec describes creating individual `remove_node` operations where "each captures the node object and all edges where the node is source or target." The naive implementation stores every connected edge in each node's `remove_node` operation. When multiple nodes share an edge (e.g. nodes n1→n2→n3 with edges e12 and e23, removing all three), edge e12 would appear in both n1's and n2's operations. Reversing the batch would then restore e12 twice, creating duplicate edges.
+
+**Resolution:** Added an `assignedEdgeIds` set that tracks which edges have already been captured in a prior node's operation. Each edge is included in the `connectedEdges` of the first node that references it only. Subsequent nodes that reference the same edge find it already in `assignedEdgeIds` and skip it. This ensures each edge is restored exactly once when the batch is undone.
