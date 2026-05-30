@@ -1,14 +1,17 @@
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
 /**
  * Main application layout shell rendered for all authenticated pages.
  *
- * Renders a fixed top header bar containing the app name ("CF-Architect") on
- * the left and the signed-in user's avatar and email on the right, followed by
- * a flexible content area that renders the matched child route via React
- * Router's `<Outlet />`.
+ * Renders a fixed top header bar containing:
+ * - The app name ("CF-Architect") on the left, linked to the dashboard.
+ * - An "Admin" navigation link (only visible to users with `role === "admin"`).
+ * - The signed-in user's avatar and email on the right.
+ *
+ * Below the header, a flexible content area renders the matched child route
+ * via React Router's `<Outlet />`.
  *
  * The header avatar shows the user's profile image when `avatar_url` is
  * present; otherwise it falls back to a coloured circle with the first letter
@@ -35,8 +38,18 @@ export function AppShell() {
 		<div className="flex h-screen flex-col bg-background text-foreground">
 			{/* Header */}
 			<header className="flex h-14 items-center justify-between border-b border-border px-4">
-				<div className="flex items-center gap-2">
-					<span className="text-lg font-semibold text-primary">CF-Architect</span>
+				<div className="flex items-center gap-4">
+					<Link to="/" className="text-lg font-semibold text-primary hover:opacity-80 transition-opacity">
+						CF-Architect
+					</Link>
+					{user?.role === "admin" && (
+						<Link
+							to="/admin"
+							className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+						>
+							Admin
+						</Link>
+					)}
 				</div>
 				{user !== null && (
 					<div className="flex items-center gap-3">

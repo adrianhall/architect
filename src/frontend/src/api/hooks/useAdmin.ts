@@ -25,7 +25,7 @@ interface AdminUsersParams {
  * in the worker. Includes `diagram_count` (absent from the shared `User` type)
  * which is computed server-side via a LEFT JOIN.
  */
-interface AdminUser {
+export interface AdminUser {
 	/** ULID primary key. */
 	id: string;
 	/** Email address. */
@@ -47,7 +47,7 @@ interface AdminUser {
 /**
  * Paginated response envelope from `GET /api/admin/users`.
  */
-interface AdminUsersResponse {
+export interface AdminUsersResponse {
 	/** User records for the current page. */
 	users: AdminUser[];
 	/** Pagination metadata. */
@@ -109,10 +109,16 @@ export function useAdminUsers(params: AdminUsersParams = {}) {
  * Mutation hook to promote a user to the `"admin"` role.
  *
  * Sends `PATCH /api/admin/users/:userId/role` with `{ role: "admin" }`.
- * Invalidates `ADMIN_USERS_QUERY_KEY` on success so the admin user list
- * reflects the updated role.
+ * Applies an optimistic update that immediately changes the user's role in the
+ * cached list; rolls back on error; invalidates all admin user queries on settle.
  *
- * @returns A TanStack Query mutation result. Call `mutateAsync({ userId })`.
+ * @returns A TanStack Query mutation result. Call `mutate({ userId })`.
+ *
+ * @example
+ * ```tsx
+ * const promote = usePromoteUser();
+ * promote.mutate({ userId: user.id });
+ * ```
  */
 export function usePromoteUser() {
 	const queryClient = useQueryClient();
@@ -123,7 +129,29 @@ export function usePromoteUser() {
 				method: "PATCH",
 				body: JSON.stringify({ role: "admin" }),
 			}),
-		onSuccess: () => {
+		onMutate: async ({ userId }) => {
+			await queryClient.cancelQueries({ queryKey: ADMIN_USERS_QUERY_KEY });
+			const previousData = queryClient.getQueriesData<AdminUsersResponse>({
+				queryKey: ADMIN_USERS_QUERY_KEY,
+			});
+			queryClient.setQueriesData<AdminUsersResponse>({ queryKey: ADMIN_USERS_QUERY_KEY }, (old) => {
+				if (!old) return old;
+				return {
+					...old,
+					users: old.users.map((u) => (u.id === userId ? { ...u, role: "admin" } : u)),
+				};
+			});
+			return { previousData };
+		},
+		onError: (_err, _vars, context) => {
+			const ctx = context as { previousData: [unknown, AdminUsersResponse | undefined][] } | undefined;
+			if (ctx?.previousData) {
+				for (const [queryKey, data] of ctx.previousData) {
+					queryClient.setQueryData(queryKey as string[], data);
+				}
+			}
+		},
+		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: ADMIN_USERS_QUERY_KEY });
 		},
 	});
@@ -133,9 +161,16 @@ export function usePromoteUser() {
  * Mutation hook to demote a user back to the `"user"` role.
  *
  * Sends `PATCH /api/admin/users/:userId/role` with `{ role: "user" }`.
- * Invalidates `ADMIN_USERS_QUERY_KEY` on success.
+ * Applies an optimistic update that immediately changes the user's role in the
+ * cached list; rolls back on error; invalidates all admin user queries on settle.
  *
- * @returns A TanStack Query mutation result. Call `mutateAsync({ userId })`.
+ * @returns A TanStack Query mutation result. Call `mutate({ userId })`.
+ *
+ * @example
+ * ```tsx
+ * const demote = useDemoteUser();
+ * demote.mutate({ userId: user.id });
+ * ```
  */
 export function useDemoteUser() {
 	const queryClient = useQueryClient();
@@ -146,7 +181,29 @@ export function useDemoteUser() {
 				method: "PATCH",
 				body: JSON.stringify({ role: "user" }),
 			}),
-		onSuccess: () => {
+		onMutate: async ({ userId }) => {
+			await queryClient.cancelQueries({ queryKey: ADMIN_USERS_QUERY_KEY });
+			const previousData = queryClient.getQueriesData<AdminUsersResponse>({
+				queryKey: ADMIN_USERS_QUERY_KEY,
+			});
+			queryClient.setQueriesData<AdminUsersResponse>({ queryKey: ADMIN_USERS_QUERY_KEY }, (old) => {
+				if (!old) return old;
+				return {
+					...old,
+					users: old.users.map((u) => (u.id === userId ? { ...u, role: "user" } : u)),
+				};
+			});
+			return { previousData };
+		},
+		onError: (_err, _vars, context) => {
+			const ctx = context as { previousData: [unknown, AdminUsersResponse | undefined][] } | undefined;
+			if (ctx?.previousData) {
+				for (const [queryKey, data] of ctx.previousData) {
+					queryClient.setQueryData(queryKey as string[], data);
+				}
+			}
+		},
+		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: ADMIN_USERS_QUERY_KEY });
 		},
 	});
@@ -156,10 +213,18 @@ export function useDemoteUser() {
  * Mutation hook to permanently delete a user (admin-only).
  *
  * Sends `DELETE /api/admin/users/:userId`. The server also deletes all
- * diagrams owned by the user before removing the user record. Invalidates
- * `ADMIN_USERS_QUERY_KEY` on success.
+ * diagrams owned by the user before removing the user record.
+ * Applies an optimistic update that immediately removes the user from all
+ * cached list pages; rolls back on error; invalidates all admin user queries
+ * on settle.
  *
- * @returns A TanStack Query mutation result. Call `mutateAsync({ userId })`.
+ * @returns A TanStack Query mutation result. Call `mutate({ userId })`.
+ *
+ * @example
+ * ```tsx
+ * const deleteUser = useDeleteUser();
+ * deleteUser.mutate({ userId: user.id });
+ * ```
  */
 export function useDeleteUser() {
 	const queryClient = useQueryClient();
@@ -169,7 +234,29 @@ export function useDeleteUser() {
 			apiClient<void>(`admin/users/${userId}`, {
 				method: "DELETE",
 			}),
-		onSuccess: () => {
+		onMutate: async ({ userId }) => {
+			await queryClient.cancelQueries({ queryKey: ADMIN_USERS_QUERY_KEY });
+			const previousData = queryClient.getQueriesData<AdminUsersResponse>({
+				queryKey: ADMIN_USERS_QUERY_KEY,
+			});
+			queryClient.setQueriesData<AdminUsersResponse>({ queryKey: ADMIN_USERS_QUERY_KEY }, (old) => {
+				if (!old) return old;
+				return {
+					...old,
+					users: old.users.filter((u) => u.id !== userId),
+				};
+			});
+			return { previousData };
+		},
+		onError: (_err, _vars, context) => {
+			const ctx = context as { previousData: [unknown, AdminUsersResponse | undefined][] } | undefined;
+			if (ctx?.previousData) {
+				for (const [queryKey, data] of ctx.previousData) {
+					queryClient.setQueryData(queryKey as string[], data);
+				}
+			}
+		},
+		onSettled: () => {
 			queryClient.invalidateQueries({ queryKey: ADMIN_USERS_QUERY_KEY });
 		},
 	});
