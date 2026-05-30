@@ -110,7 +110,7 @@ export function UserTable({ users, currentUserId, sort, order, onSort }: UserTab
 							</span>
 						</TableHead>
 					))}
-					<TableHead>Diagrams</TableHead>
+					<TableHead className="text-center">Diagrams</TableHead>
 					<TableHead className="w-20">Actions</TableHead>
 				</TableRow>
 			</TableHeader>
@@ -128,7 +128,7 @@ export function UserTable({ users, currentUserId, sort, order, onSort }: UserTab
 							</Badge>
 						</TableCell>
 						<TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
-						<TableCell className="text-right">{user.diagram_count}</TableCell>
+						<TableCell className="text-center">{user.diagram_count}</TableCell>
 						<TableCell>
 							<UserActions user={user} isSelf={user.id === currentUserId} />
 						</TableCell>
