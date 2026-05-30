@@ -429,7 +429,8 @@ Each issue includes unit tests for the functionality it introduces. There is no 
 | ISSUE-14 | Custom edge types + connection handling + tests | 13 |
 | ISSUE-15 | Service palette: categories, collapse, drag-drop + tests | 13 |
 | ISSUE-16 | Properties panel: node and edge editing + tests | 14 |
-| ISSUE-17 | Undo/redo system (>=50 steps, operation-based) + tests | 14 |
+| ISSUE-17A | Operation types, apply/reverse pure functions + tests | 14 |
+| ISSUE-17B | Store undo/redo integration + keyboard shortcuts + tests | 17A |
 | ISSUE-18 | Auto-save via DiagramSync abstraction + save status + tests | 06, 13 |
 | ISSUE-19 | ELK auto-layout in Web Worker + tests | 14 |
 
