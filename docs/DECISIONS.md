@@ -691,3 +691,31 @@ TypeError: U8 is not a constructor
 **Decision:** The `e2e/` directory TypeScript files use `@playwright/test` which is not part of any workspace project. Adding `e2e/` to the root `tsconfig.json` references would require making it a composite project, and including it directly in the root `include` array would conflict with the project-references architecture.
 
 **Resolution:** A standalone `tsconfig.e2e.json` with `"noEmit": true` covers `e2e/**/*.ts`. IDE support and explicit type checking via `npm run check:types:e2e` are available, but the e2e type check is not part of the main `check` pipeline (which only uses `tsc -b --noEmit` for workspace projects). Biome lints the e2e files as part of `check:biome` because they are not gitignored.
+
+---
+
+## ISSUE-22 — E2E tests: Tomas flows (admin user management)
+
+### Non-admin at `/admin` shows "Forbidden" page, not a redirect
+
+**Decision:** The issue spec's acceptance criterion says "Non-admin user is redirected away from `/admin`". The actual implementation from ISSUE-20 renders `AdminRoute` which displays a "Forbidden" heading (`<h1>Forbidden</h1>`) for non-admin users. There is no client-side redirect — the URL remains `/admin` but the admin content is replaced by the access-denied message.
+
+**Resolution:** The test was updated to `await expect(page.getByRole("heading", { name: /forbidden/i })).toBeVisible()` instead of asserting a URL change. The `Admin` component has an internal `useEffect` redirect, but it is never mounted because `AdminRoute` renders the Forbidden screen instead of `children` for non-admin users.
+
+### `dotenv` loaded in `playwright.config.ts` to expose `SEED_ADMIN_EMAIL`
+
+**Decision:** The admin E2E tests must authenticate as the seed-admin user (the one configured via `SEED_ADMIN_EMAIL` in `.env`). Playwright does not automatically load `.env` files from the project root. Without explicit loading, `process.env.SEED_ADMIN_EMAIL` would be `undefined` in all test files, causing the tests to fall back to `"tomas-admin@example.com"` — an email that is almost certainly not the actual seed admin.
+
+**Resolution:** Added `import { config as loadDotEnv } from "dotenv"; loadDotEnv();` at the top of `playwright.config.ts`. The `dotenv` package is available as a transitive dependency of `wrangler`. This makes `SEED_ADMIN_EMAIL` (and any other `.env` variables) available to all test files via `process.env` without requiring the developer to manually `export` them in their shell before running tests.
+
+### `beforeAll` cleanup step ensures idempotent test runs
+
+**Decision:** The local D1 database persists across `npm run test:e2e` invocations. Without cleanup, test users from a previous run accumulate extra diagrams on the second run (e.g. "testuser-3" would have 3 + 3 = 6 diagrams instead of 3), causing the delete-confirmation count assertion to fail.
+
+**Resolution:** `beforeAll` provisions each test user first (idempotent — creates if absent, returns existing record if present), then deletes them via the admin API to wipe their state, then re-provisions them with a known-clean diagram count. The cleanup uses the admin user's token (which is provisioned first). HTTP 404 responses from the delete call are silently ignored since a missing user is also a clean state.
+
+### `AlertDialogAction` button text is "Delete", not "Confirm"
+
+**Decision:** The issue spec suggests clicking `getByRole("button", { name: /delete|confirm/i })` inside the confirmation dialog. The `UserActions` component renders `<AlertDialogAction>Delete</AlertDialogAction>` (text: "Delete"). There is no "Confirm" button.
+
+**Resolution:** Tests use `dialog.getByRole("button", { name: /^delete$/i })` to match the exact "Delete" button text. The `^` and `$` anchors prevent matching "Delete User" menu items that may still exist in the portal during the dialog transition.

@@ -1,4 +1,10 @@
 import { defineConfig } from "@playwright/test";
+import { config as loadDotEnv } from "dotenv";
+
+// Load project-root .env so that SEED_ADMIN_EMAIL (and other vars) are
+// available via process.env in all test files without requiring the caller
+// to export them manually in their shell.
+loadDotEnv();
 
 /**
  * Playwright configuration for CF-Architect E2E tests.
