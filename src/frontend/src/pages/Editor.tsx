@@ -267,7 +267,13 @@ function EditorCanvas() {
 					onNodeClick={handleNodeClick}
 					onEdgeClick={handleEdgeClick}
 					onPaneClick={handlePaneClick}
-					fitView
+					// fitView is intentionally omitted.  React Flow defers fitView
+					// when the node array is empty on mount, then fires it the moment
+					// the first node appears — zooming the canvas all the way into that
+					// single node.  Subsequent drops are unaffected because fitView
+					// only triggers once per component lifecycle.  The keyboard shortcut
+					// Ctrl+Shift+F (calls fitView() from useReactFlow) is the explicit
+					// way to fit the viewport; the prop is not needed for that.
 					// Disable React Flow's built-in delete handling — our handler
 					// adds a text-input guard that the built-in handler lacks.
 					deleteKeyCode={null}
