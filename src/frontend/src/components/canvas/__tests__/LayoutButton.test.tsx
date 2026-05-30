@@ -1,8 +1,8 @@
 /**
  * Tests for the LayoutButton component.
  *
- * The `useAutoLayout` hook is mocked so these tests verify only the component's
- * rendering and interaction logic, not the underlying Worker or ELK computation.
+ * Both `useAutoLayout` and `useReactFlow` (for fitView) are mocked so these
+ * tests verify only the component's rendering and interaction logic.
  *
  * Radix DropdownMenu requires `userEvent.click` to open (it responds to the
  * full pointer-event sequence); `fireEvent.click` only dispatches a bare click
@@ -30,12 +30,28 @@ vi.mock("../../../hooks/useAutoLayout", () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Mock useReactFlow (fitView)
+// ---------------------------------------------------------------------------
+
+const mockFitView = vi.fn();
+
+vi.mock("@xyflow/react", async () => {
+	const actual = await vi.importActual("@xyflow/react");
+	return {
+		...actual,
+		useReactFlow: () => ({ fitView: mockFitView }),
+	};
+});
+
+// ---------------------------------------------------------------------------
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
-	mockApplyLayout = vi.fn();
+	// Return a resolved Promise so `await applyLayout()` completes immediately.
+	mockApplyLayout = vi.fn().mockResolvedValue(undefined);
 	mockIsLayouting = false;
+	mockFitView.mockClear();
 });
 
 afterEach(() => {
@@ -51,10 +67,10 @@ describe("LayoutButton", () => {
 	it("renders a button with 'Layout' text when idle", () => {
 		render(<LayoutButton />);
 		expect(screen.getByRole("button", { name: /layout/i })).toBeInTheDocument();
-		expect(screen.queryByText(/layouting/i)).toBeNull();
+		expect(screen.queryByText(/formatting/i)).toBeNull();
 	});
 
-	it("clicking 'Top to Bottom' calls applyLayout('TB')", async () => {
+	it("clicking 'Top to Bottom' calls applyLayout('TB') then fitView", async () => {
 		render(<LayoutButton />);
 
 		// userEvent.click fires the full pointer event sequence that Radix needs
@@ -69,7 +85,7 @@ describe("LayoutButton", () => {
 		expect(mockApplyLayout).toHaveBeenCalledWith("TB");
 	});
 
-	it("clicking 'Left to Right' calls applyLayout('LR')", async () => {
+	it("clicking 'Left to Right' calls applyLayout('LR') then fitView", async () => {
 		render(<LayoutButton />);
 
 		await userEvent.click(screen.getByRole("button", { name: /layout/i }));

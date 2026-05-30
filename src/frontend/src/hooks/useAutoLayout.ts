@@ -134,21 +134,31 @@ export function useAutoLayout(): UseAutoLayoutResult {
 					})
 					.filter((op): op is NonNullable<typeof op> => op !== null);
 
-				// Build update_edge ops to clear pinned sourceHandle / targetHandle
-				// on every edge that has them. Cleared handles let React Flow
-				// auto-route edges based on the new node positions instead of
-				// routing via the old handles (which produces S-shaped curves when
-				// the layout direction changes, e.g. LR → TB).
-				const edgeClearOperations = currentEdges
-					.filter((e) => e.sourceHandle != null || e.targetHandle != null)
+				// Determine the canonical handle IDs for this layout direction.
+				// CloudflareServiceNode exposes four handles with these IDs:
+				//   source (outgoing): "right" | "bottom"
+				//   target (incoming): "left"  | "top"
+				//
+				// We explicitly set every edge to use the correct handles for the
+				// direction rather than clearing them to undefined. Clearing to
+				// undefined and relying on React Flow auto-routing fails on
+				// sequential layouts: React Flow may reuse the cached handle
+				// geometry from the previous render (e.g. bottom→top after TB)
+				// instead of recomputing for the new node positions (e.g. right→left
+				// after LR), producing S-shaped curves.
+				const newSourceHandle = direction === "TB" ? "bottom" : "right";
+				const newTargetHandle = direction === "TB" ? "top" : "left";
+
+				const edgeHandleOperations = currentEdges
+					.filter((e) => e.sourceHandle !== newSourceHandle || e.targetHandle !== newTargetHandle)
 					.map((e) => ({
 						type: "update_edge" as const,
 						edgeId: e.id,
 						from: { sourceHandle: e.sourceHandle, targetHandle: e.targetHandle },
-						to: { sourceHandle: undefined, targetHandle: undefined },
+						to: { sourceHandle: newSourceHandle, targetHandle: newTargetHandle },
 					}));
 
-				const allOperations = [...moveOperations, ...edgeClearOperations];
+				const allOperations = [...moveOperations, ...edgeHandleOperations];
 
 				if (allOperations.length > 0) {
 					useDiagramStore.getState().applyBatchOperation({

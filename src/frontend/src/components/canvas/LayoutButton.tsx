@@ -6,18 +6,18 @@
  * the button is disabled and shows a spinning `Loader2` icon; otherwise it
  * shows `LayoutDashboard`.
  *
- * The actual layout computation runs in a background Web Worker via the
- * {@link useAutoLayout} hook, so the canvas remains interactive during
- * computation.
+ * After layout is applied, `fitView` is called to bring all repositioned nodes
+ * into view — common when the layout shape or extent changes substantially.
  *
  * @example
  * ```tsx
- * // In a toolbar:
+ * // In a toolbar (must be a descendant of ReactFlowProvider):
  * <div className="flex items-center gap-2 p-2 border-b">
  *   <LayoutButton />
  * </div>
  * ```
  */
+import { useReactFlow } from "@xyflow/react";
 import { LayoutDashboard, Loader2 } from "lucide-react";
 import { useAutoLayout } from "../../hooks/useAutoLayout";
 import { Button } from "../ui/button";
@@ -26,15 +26,29 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 /**
  * Toolbar button that triggers ELK auto-layout with a direction dropdown.
  *
- * Uses the {@link useAutoLayout} hook to run layout off the main thread.
- * The button is disabled and shows a loading spinner while `isLayouting` is
- * `true`. Once layout finishes, node positions in the Zustand diagram store
- * are updated as a single batch undo/redo step.
+ * Uses the {@link useAutoLayout} hook to compute and apply the layout, then
+ * calls `fitView` so the viewport adjusts to the new node arrangement. The
+ * button is disabled and shows a loading spinner while `isLayouting` is
+ * `true`. The entire layout (node moves + edge handle updates) is a single
+ * undo/redo step.
+ *
+ * Must be rendered inside a `ReactFlowProvider` to access `fitView`.
  *
  * @returns A dropdown-menu trigger button wired to the ELK layout hook.
  */
 export function LayoutButton() {
 	const { applyLayout, isLayouting } = useAutoLayout();
+	const { fitView } = useReactFlow();
+
+	/**
+	 * Applies the chosen layout direction then fits the viewport to all nodes.
+	 *
+	 * @param direction - `"TB"` for top-to-bottom or `"LR"` for left-to-right.
+	 */
+	const handleLayout = async (direction: "TB" | "LR") => {
+		await applyLayout(direction);
+		fitView({ duration: 400, padding: 0.15 });
+	};
 
 	return (
 		<DropdownMenu>
@@ -54,8 +68,8 @@ export function LayoutButton() {
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="start">
-				<DropdownMenuItem onSelect={() => applyLayout("TB")}>Top to Bottom</DropdownMenuItem>
-				<DropdownMenuItem onSelect={() => applyLayout("LR")}>Left to Right</DropdownMenuItem>
+				<DropdownMenuItem onSelect={() => handleLayout("TB")}>Top to Bottom</DropdownMenuItem>
+				<DropdownMenuItem onSelect={() => handleLayout("LR")}>Left to Right</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
 	);

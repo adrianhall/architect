@@ -188,8 +188,8 @@ describe("useAutoLayout", () => {
 		expect(mockComputeLayout).toHaveBeenCalledOnce();
 	});
 
-	it("clears pinned sourceHandle/targetHandle on all edges as part of the layout batch", async () => {
-		// Set up a node and an edge with explicit handles (simulating a LR-drawn edge).
+	it("TB layout sets sourceHandle='bottom' and targetHandle='top' on all edges", async () => {
+		// Edge starts with LR handles (drawn left-to-right).
 		useDiagramStore.getState().loadDiagram(
 			"test-id",
 			"Test",
@@ -212,49 +212,92 @@ describe("useAutoLayout", () => {
 			1,
 		);
 
-		// ELK returns new TB positions.
 		mockComputeLayout.mockResolvedValue([
 			{ nodeId: "a", position: { x: 0, y: 0 } },
 			{ nodeId: "b", position: { x: 0, y: 180 } },
 		]);
 
 		const { result } = renderHook(() => useAutoLayout());
-
 		await act(async () => {
 			await result.current.applyLayout("TB");
 		});
 
-		// Edge handles must be cleared so React Flow auto-routes for the new layout.
 		const edge = useDiagramStore.getState().edges[0];
-		expect(edge.sourceHandle).toBeUndefined();
-		expect(edge.targetHandle).toBeUndefined();
-
-		// The entire layout (moves + handle clears) is a single undo step.
+		expect(edge.sourceHandle).toBe("bottom");
+		expect(edge.targetHandle).toBe("top");
+		// The entire layout (moves + handle update) is a single undo step.
 		expect(useDiagramStore.getState().undoStack).toHaveLength(1);
 		expect(useDiagramStore.getState().undoStack[0].type).toBe("batch");
 	});
 
-	it("does not push a handle-clear op for edges that already have no handles", async () => {
+	it("LR layout sets sourceHandle='right' and targetHandle='left' on all edges", async () => {
+		// Edge starts with TB handles (set by a prior TB layout).
 		useDiagramStore.getState().loadDiagram(
 			"test-id",
 			"Test",
-			[{ id: "a", position: { x: 0, y: 0 }, type: "cloudflareService", data: {} }],
-			// Edge with no sourceHandle/targetHandle (React Flow auto-routed).
-			[{ id: "e1", source: "a", target: "a", type: "data-flow", data: {} }],
+			[
+				{ id: "a", position: { x: 0, y: 0 }, type: "cloudflareService", data: {} },
+				{ id: "b", position: { x: 0, y: 180 }, type: "cloudflareService", data: {} },
+			],
+			[
+				{
+					id: "e1",
+					source: "a",
+					target: "b",
+					type: "data-flow",
+					sourceHandle: "bottom",
+					targetHandle: "top",
+					data: {},
+				},
+			],
 			undefined,
 			1,
 		);
 
-		// Layout moves no nodes (positions unchanged) and has no handle ops to push.
+		mockComputeLayout.mockResolvedValue([
+			{ nodeId: "a", position: { x: 0, y: 0 } },
+			{ nodeId: "b", position: { x: 200, y: 0 } },
+		]);
+
+		const { result } = renderHook(() => useAutoLayout());
+		await act(async () => {
+			await result.current.applyLayout("LR");
+		});
+
+		const edge = useDiagramStore.getState().edges[0];
+		expect(edge.sourceHandle).toBe("right");
+		expect(edge.targetHandle).toBe("left");
+	});
+
+	it("does not push a handle op when handles already match the target direction", async () => {
+		// Edge already has correct TB handles — no change needed.
+		useDiagramStore.getState().loadDiagram(
+			"test-id",
+			"Test",
+			[{ id: "a", position: { x: 0, y: 0 }, type: "cloudflareService", data: {} }],
+			[
+				{
+					id: "e1",
+					source: "a",
+					target: "a",
+					type: "data-flow",
+					sourceHandle: "bottom",
+					targetHandle: "top",
+					data: {},
+				},
+			],
+			undefined,
+			1,
+		);
+
+		// Positions also unchanged — nothing in the batch at all.
 		mockComputeLayout.mockResolvedValue([{ nodeId: "a", position: { x: 0, y: 0 } }]);
 
 		const { result } = renderHook(() => useAutoLayout());
-
 		await act(async () => {
 			await result.current.applyLayout("TB");
 		});
 
-		// Nothing changed — no undo step should have been pushed.
 		expect(useDiagramStore.getState().undoStack).toHaveLength(0);
 	});
 });
