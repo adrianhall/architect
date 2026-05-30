@@ -10,22 +10,27 @@ import { defineConfig } from "vitest/config";
  * - `src/frontend` — jsdom environment for React component tests.
  * - `src/shared` — standard Node environment for pure TypeScript type tests.
  *
- * Coverage is collected only for the non-Workers-runtime projects (frontend
- * and, once populated, shared).  `@vitest/coverage-v8` cannot instrument code
- * running inside Miniflare because `node:inspector/promises` is not available
- * in the Workers runtime — this is a documented Cloudflare limitation:
- * https://developers.cloudflare.com/workers/testing/vitest-integration/known-issues/
+ * Coverage uses `@vitest/coverage-istanbul` (instrumentation-based) rather
+ * than `@vitest/coverage-v8` (native V8 profiler). The Cloudflare Workers
+ * runtime does not expose V8's coverage profiler API, so Istanbul is required
+ * for worker coverage. Istanbul instruments source files with counters before
+ * execution, which works in any JS runtime including Miniflare.
  *
- * Worker code correctness is verified through integration tests against a real
- * Miniflare D1 instance (see `src/worker/vitest.config.ts`).
+ * Reporters:
+ * - `text`         — per-file table printed to stdout.
+ * - `text-summary` — one-line totals printed to stdout.
+ * - `json`         — machine-readable data written to coverage/coverage.json.
+ * - `lcov`         — standard lcov.info for CI and editor integrations.
+ *
+ * HTML output is intentionally omitted.
  */
 export default defineConfig({
 	test: {
 		projects: ["src/worker", "src/frontend", "src/shared"],
 		coverage: {
-			provider: "v8",
-			// Exclude worker source — v8 cannot instrument code in the Workers runtime.
-			include: ["src/frontend/src/**", "src/shared/src/**"],
+			provider: "istanbul",
+			reporter: ["text", "text-summary", "json", "lcov"],
+			include: ["src/worker/src/**", "src/frontend/src/**", "src/shared/src/**"],
 			exclude: [
 				"src/**/*.test.ts",
 				"src/**/*.test.tsx",

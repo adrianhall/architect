@@ -40,7 +40,7 @@
 		"start:worker": "wrangler dev --config src/worker/wrangler.jsonc",
 		"teardown": "terraform -chdir=infra destroy -auto-approve",
 		"test": "vitest run",
-		"test:coverage": "vitest run --coverage --project frontend --project shared",
+		"test:coverage": "vitest run --coverage",
 		"test:frontend": "vitest run --project frontend",
 		"test:shared": "vitest run --project shared",
 		"test:watch": "vitest",
@@ -49,7 +49,7 @@
 	"devDependencies": {
 		"@adrianhall/cloudflare-scripts": "github:adrianhall/cloudflare-scripts",
 		"@biomejs/biome": "2.4.16",
-		"@vitest/coverage-v8": "^4.1.7",
+		"@vitest/coverage-istanbul": "^4.1.7",
 		"jsdom": "^26.1.0",
 		"markdownlint-cli2": "0.22.1",
 		"npm-run-all2": "9.0.1",
