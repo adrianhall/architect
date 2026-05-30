@@ -733,6 +733,7 @@ TypeError: U8 is not a constructor
 ### `types: ["vite/client"]` added to frontend tsconfig
 
 **Decision:** The frontend `src/main.tsx` contains two CSS side-effect imports:
+
 - `import "@xyflow/react/dist/style.css"` (React Flow's base styles)
 - `import "./app.css"` (Tailwind CSS v4 directives)
 
