@@ -17,7 +17,7 @@ If you are not on the `main` branch, **STOP** and inform the human user that the
 
 ## Issue to implement
 
-Read `docs/issues/ISSUE-$1.md`
+Read the issue using `gh issue view $1`
 
 ---
 
@@ -131,29 +131,35 @@ Run `npm run build` to verify that everything builds correctly.  Identify any wa
 
 ---
 
-### Step 6 — Verify: tests (if applicable)
+### Step 6 — Verify: tests
 
-Skip this step if no test suite exists yet for this layer (check before running).
-
-If the issue adds or modifies **worker API code** (routes, middleware, db, lib), also run:
+Run the following:
 
 ```bash
-npm test
+npm run test:coverage
+npm run test:e2e
 ```
 
-Every test must pass. Fix failures before committing.
+Any failures are significant and should be investigated and fixed.  The quality gate requires 90% coverage.  Analyze coverage misses to determine which of the following actions to take:
 
-If the issue is purely frontend, infrastructure, or documentation work and no test suite exists yet for that layer, skip this step and note it in the commit message.
+| Coverage miss type    | What to do |
+|-----------------------|------------|
+| Easy to fix.          | Add a test |
+| Part of the main flow | Add tests. |
+| Defensive programming | Add an istanbul ignore next comment |
+| Anything else.        | Ask        |
 
 ---
 
 ### Step 7 - Determine follow-up items
 
-Determine if any follow-up items are needed.  Explicitly, you should determine if any issue documents (stored in `docs/issues`) or the `docs/MVP_PLAN.md` document needs to be updated based on what you found while implementing this issue.
+Determine if any follow-up items are needed.  Explicitly, you should determine if the `docs/MVP_PLAN.md` document needs to be updated based on what you found while implementing this issue.
 
 - Make changes to `docs/MVP_PLAN.md` as needed.
-- Add decisions to `docs/DECISIONS.md` (include the issue where the decision was made) - do not include decisions already made in ISSUES documents.
-- Add follow-up issues to `docs/issues` using the `docs/ISSUE-EXAMPLE.md` document as a template.
+- Add decisions to `docs/DECISIONS.md` (include the issue where the decision was made).
+- Add follow-up issues to GitHub Issues using the `gh` command. Use the `docs/ISSUE-EXAMPLE.md` document as a template.
+
+Note that the early issues were driven by files in `docs/issues/ISSUE-*.md` - ensure you make clear that you are referencing a GitHub issue when updating the `docs/DECISIONS.md` file.
 
 ---
 
