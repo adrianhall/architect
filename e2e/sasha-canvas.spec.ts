@@ -184,7 +184,9 @@ test.describe("Sasha: Canvas Editing", () => {
 		const nodeBefore = await page.locator(".react-flow__node").first().boundingBox();
 
 		// Click the "Layout" button to trigger ELK auto-layout.
-		await page.getByRole("button", { name: /^layout$/i }).click();
+		// The LayoutButton has aria-label="Auto-layout"; getByRole resolves the
+		// accessible name from aria-label first (not from visible text "Layout").
+		await page.getByRole("button", { name: /auto.?layout/i }).click();
 
 		// Choose a layout direction (Top to Bottom).
 		await page.getByRole("menuitem", { name: /top to bottom/i }).click();

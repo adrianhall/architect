@@ -32,6 +32,16 @@ test.describe("Sasha: Dashboard", () => {
 
 	test.beforeAll(async ({ browser }) => {
 		context = await createAuthenticatedContext(browser, TEST_EMAIL);
+
+		// Delete any diagrams left over from previous test runs so the suite
+		// always starts from a clean empty-state. The local D1 database persists
+		// across runs, so without this step the "empty state" test would fail on
+		// every run after the first.
+		const listResp = await context.request.get("http://localhost:8787/api/diagrams");
+		const body = (await listResp.json()) as { data: Array<{ id: string }> };
+		for (const diagram of body.data ?? []) {
+			await context.request.delete(`http://localhost:8787/api/diagrams/${diagram.id}`);
+		}
 	});
 
 	test.beforeEach(async () => {
