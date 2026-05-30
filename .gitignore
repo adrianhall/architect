@@ -119,5 +119,11 @@ dist
 # Vite frontend build output (served by the Worker via ASSETS binding)
 src/worker/public/
 
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # MacOS State files
 .DS_Store

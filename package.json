@@ -44,11 +44,14 @@
 		"test:frontend": "vitest run --project frontend",
 		"test:shared": "vitest run --project shared",
 		"test:watch": "vitest",
+		"test:e2e": "playwright test",
+		"test:e2e:ui": "playwright test --ui",
 		"test:worker": "vitest run --project worker"
 	},
 	"devDependencies": {
 		"@adrianhall/cloudflare-scripts": "github:adrianhall/cloudflare-scripts",
 		"@biomejs/biome": "2.4.16",
+		"@playwright/test": "^1.60.0",
 		"@vitest/coverage-istanbul": "^4.1.7",
 		"jsdom": "^26.1.0",
 		"markdownlint-cli2": "0.22.1",

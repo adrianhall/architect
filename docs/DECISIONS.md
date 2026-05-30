@@ -647,3 +647,47 @@ TypeError: U8 is not a constructor
 ### `onSelect` used on `DropdownMenuItem` instead of `onClick` (AGENTS.md pattern)
 
 **Decision:** Radix DropdownMenu closes its portal on `pointerup` before the native `click` event fires. Following the established pattern from ISSUE-12 and AGENTS.md, all state changes in `UserActions.tsx` are placed in `onSelect` callbacks (not `onClick`). `onClick={(e) => e.stopPropagation()}` is also added to prevent event bubbling to any parent containers.
+
+---
+
+## ISSUE-21 — E2E tests: Sasha flows (auth, dashboard, canvas editing)
+
+### `signDevJwt` takes a plain string, not `{ email }` object
+
+**Decision:** The issue spec shows `signDevJwt({ email })` in the auth helper. The actual function signature is `signDevJwt(email: string, options?)` — it takes the email as a plain string argument, not an object literal.
+
+**Resolution:** `e2e/helpers/auth.ts` calls `signDevJwt(email)` with the correct positional argument. This was confirmed by inspecting `node_modules/@adrianhall/cloudflare-auth/dist/jwt.d.ts`.
+
+### `test.describe.configure({ mode: "serial" })` added to dashboard and canvas specs
+
+**Decision:** The issue spec sets `fullyParallel: true` in the Playwright config, which allows tests within the same file to run in parallel. The dashboard and canvas specs depend on sequential state accumulation (e.g., the "diagram appears in card grid" test requires a diagram created by the preceding "create new diagram" test). Running these tests in parallel would cause ordering-dependent failures.
+
+**Resolution:** Added `test.describe.configure({ mode: "serial" })` at the top of each stateful `describe` block in `sasha-dashboard.spec.ts` and `sasha-canvas.spec.ts`. Auth tests are independent and remain fully parallel.
+
+### `data-testid` attributes added to existing components
+
+**Decision:** The existing component implementations (from ISSUE-12 through ISSUE-19) did not include `data-testid` attributes needed by the E2E tests. The issue spec documents this explicitly: "Adjust selectors to match the actual DOM structure."
+
+**Resolution:** Added `data-testid` attributes at the appropriate DOM locations:
+
+- `data-testid="diagram-card"` on the `<Card>` element in `DiagramCard.tsx` (enables finding cards in the grid).
+- `data-testid="diagram-title"` on the title `<p>` in `DiagramCard.tsx` (enables reading card title text).
+- `data-testid="palette-service"` on the `<button>` in `PaletteItem.tsx` (enables locating draggable services).
+- `data-testid="properties-panel"` on the `<aside>` in `Editor.tsx` that conditionally wraps `PropertiesPanel` (enables finding the properties panel when a node is selected).
+- `data-testid="save-status"` on the status bar `<div>` in `Editor.tsx` that wraps the `SaveStatus` component (enables asserting on the auto-save status text).
+
+### Fit-to-view located by `page.getByTitle("fit view")`
+
+**Decision:** The issue spec suggests `page.getByRole("button", { name: /fit.?view|fit/i })` for the fit-to-view button. React Flow v12's `Controls` component renders the fit-view button with a `title="fit view"` attribute but no explicit `aria-label`. Playwright's `getByRole("button", { name: ... })` matches by accessible name, which uses `aria-label` first and falls back to `title`. Both selectors resolve correctly; using `getByTitle("fit view")` is more explicit about the DOM attribute being matched.
+
+### Auto-layout test uses dropdown instead of direct button click
+
+**Decision:** The issue spec tests auto-layout via `page.getByRole("button", { name: /auto.?layout|layout/i }).click()`. The `LayoutButton` component renders a `DropdownMenu` trigger with `aria-label="Auto-layout"` and displays two menu items ("Top to Bottom" / "Left to Right"). A single click opens the dropdown; a second click on a menu item applies the layout.
+
+**Resolution:** The canvas test clicks the "Layout" button (matches `aria-label="Auto-layout"` text "Layout"), then selects the "Top to Bottom" menu item. This mirrors the actual UX flow and tests the full layout selection interaction.
+
+### `tsconfig.e2e.json` created for IDE and on-demand type checking
+
+**Decision:** The `e2e/` directory TypeScript files use `@playwright/test` which is not part of any workspace project. Adding `e2e/` to the root `tsconfig.json` references would require making it a composite project, and including it directly in the root `include` array would conflict with the project-references architecture.
+
+**Resolution:** A standalone `tsconfig.e2e.json` with `"noEmit": true` covers `e2e/**/*.ts`. IDE support and explicit type checking via `npm run check:types:e2e` are available, but the e2e type check is not part of the main `check` pipeline (which only uses `tsc -b --noEmit` for workspace projects). Biome lints the e2e files as part of `check:biome` because they are not gitignored.

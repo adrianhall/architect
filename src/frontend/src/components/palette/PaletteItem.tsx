@@ -56,6 +56,7 @@ function PaletteItem({ service }: PaletteItemProps) {
 			onDragStart={handleDragStart}
 			className="flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent active:cursor-grabbing"
 			title={service.officialName}
+			data-testid="palette-service"
 		>
 			<img
 				src={`/catalog/icons/${service.iconPath}`}

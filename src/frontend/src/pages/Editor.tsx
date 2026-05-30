@@ -437,14 +437,14 @@ function EditorCanvas() {
 
 				{/* Properties panel — shown only when a node or edge is selected */}
 				{hasSelection && (
-					<aside className="w-72 shrink-0 border-l bg-background">
+					<aside className="w-72 shrink-0 border-l bg-background" data-testid="properties-panel">
 						<PropertiesPanel />
 					</aside>
 				)}
 			</div>
 
 			{/* Status bar — always visible at the bottom of the editor */}
-			<div className="flex items-center justify-between border-t bg-background px-4 py-1">
+			<div className="flex items-center justify-between border-t bg-background px-4 py-1" data-testid="save-status">
 				<SaveStatus
 					status={saveStatus}
 					lastSavedAt={lastSavedAt}

@@ -193,6 +193,7 @@ export function DiagramCard({ id, title, updatedAt }: DiagramCardProps) {
 				onClick={handleCardClick}
 				role="link"
 				tabIndex={0}
+				data-testid="diagram-card"
 				onKeyDown={(e) => {
 					if (e.key === "Enter" && !isRenaming) navigate(`/editor/${id}`);
 				}}
@@ -243,7 +244,9 @@ export function DiagramCard({ id, title, updatedAt }: DiagramCardProps) {
 							/>
 						) : (
 							<>
-								<p className="truncate text-sm font-medium">{title}</p>
+								<p className="truncate text-sm font-medium" data-testid="diagram-title">
+									{title}
+								</p>
 								<p className="text-xs text-muted-foreground">{formatRelativeTime(updatedAt)}</p>
 							</>
 						)}
