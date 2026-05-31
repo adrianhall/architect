@@ -1,15 +1,7 @@
 import { asc, desc, eq, like, or, sql } from "drizzle-orm";
-import type { DrizzleD1Database } from "drizzle-orm/d1";
-import { diagrams, users } from "../../db/schema";
-import { ErrorCode } from "../../lib/errors";
-
-/**
- * Concrete Drizzle database type used throughout this repository module.
- *
- * Matches the type returned by `drizzle(d1)` when called without a schema
- * argument, which is the pattern used by all route handlers in this project.
- */
-type Db = DrizzleD1Database<Record<string, never>>;
+import { diagrams, users } from "../db/schema";
+import { ErrorCode } from "../lib/errors";
+import { type Db, RepositoryError } from "./types";
 
 // ── Exported Types ─────────────────────────────────────────────────────────────
 
@@ -117,52 +109,6 @@ const SORT_COLUMN_MAP = {
  * without duplicating the array.
  */
 export const VALID_ROLES = ["admin", "user"] as const;
-
-// ── RepositoryError ────────────────────────────────────────────────────────────
-
-/**
- * Error thrown by repository functions to signal a domain-level failure.
- *
- * Each instance carries an {@link ErrorCode} and a suggested HTTP status code
- * (`statusHint`). Route handlers catch this class in a single top-level
- * try/catch and map it directly to an API error response:
- *
- * ```ts
- * try {
- *   const result = await updateUserRole(db, actor, targetId, role);
- *   return c.json(success(serializeAdminUser(result)));
- * } catch (err) {
- *   if (err instanceof RepositoryError) {
- *     return c.json(error(err.code, err.message), err.statusHint as StatusCode);
- *   }
- *   throw err;
- * }
- * ```
- *
- * Non-repository errors (unexpected DB failures, etc.) are re-thrown and
- * handled by the global error handler.
- *
- * @example
- * ```ts
- * throw new RepositoryError(ErrorCode.NOT_FOUND, 404, "User not found");
- * ```
- */
-export class RepositoryError extends Error {
-	/**
-	 * @param code - One of the {@link ErrorCode} constants to include in the
-	 *   API error response body.
-	 * @param statusHint - Suggested HTTP status code (e.g., 400, 404, 401).
-	 * @param message - Human-readable description of the error.
-	 */
-	constructor(
-		public readonly code: ErrorCode,
-		public readonly statusHint: number,
-		message: string,
-	) {
-		super(message);
-		this.name = "RepositoryError";
-	}
-}
 
 // ── Serialization Helper ───────────────────────────────────────────────────────
 
@@ -396,10 +342,9 @@ export async function updateUserRole(db: Db, actor: BareUserRow, targetId: strin
 }
 
 /**
- * Returns the audit log fields needed after a role change.
+ * Returns the audit log action string for a role change.
  *
- * Extracted from {@link updateUserRole} to keep the function focused on DB
- * mutations. The route handler uses this to build the structured log entry.
+ * Extracted to keep the route handler free of role-related logic.
  *
  * @param role - The new role that was applied.
  * @returns `"promote"` when the new role is `"admin"`, `"demote"` otherwise.

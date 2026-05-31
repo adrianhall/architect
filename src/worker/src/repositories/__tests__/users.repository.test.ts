@@ -2,15 +2,15 @@ import { env } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it } from "vitest";
-import { diagrams, users } from "../../../db/schema";
-import { ErrorCode } from "../../../lib/errors";
-import { createTestDiagram, createTestUser } from "../../../test/helpers";
+import { diagrams, users } from "../../db/schema";
+import { ErrorCode } from "../../lib/errors";
+import { createTestDiagram, createTestUser } from "../../test/helpers";
+import { RepositoryError } from "../types";
 import {
 	auditActionForRole,
 	deleteUser,
 	getUserWithDiagramCount,
 	listUsers,
-	RepositoryError,
 	resolveActor,
 	serializeAdminUser,
 	updateUserRole,

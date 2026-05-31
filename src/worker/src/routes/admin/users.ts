@@ -14,7 +14,7 @@ import {
 	serializeAdminUser,
 	updateUserRole,
 	VALID_ROLES,
-} from "./users.repository";
+} from "../../repositories";
 
 /**
  * Environment bindings required by the `/api/admin/users` route set.

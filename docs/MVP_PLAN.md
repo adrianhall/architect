@@ -149,8 +149,11 @@ architect/
 │   │       │   ├── diagrams.ts     # CRUD: /api/diagrams
 │   │       │   ├── catalog.ts      # GET /api/catalog
 │   │       │   └── admin/
-│   │       │       ├── users.ts              # /api/admin/users (thin Hono shim)
-│   │       │       └── users.repository.ts   # All DB + business logic for admin users
+│   │       │       └── users.ts    # /api/admin/users (thin Hono shim)
+│   │       ├── repositories/       # DB + business logic (one module per domain)
+│   │       │   ├── index.ts        # Barrel re-export of all repository symbols
+│   │       │   ├── types.ts        # Shared RepositoryError class + Db type alias
+│   │       │   └── users.repository.ts  # Admin-users DB + business logic
 │   │       ├── db/
 │   │       │   ├── schema.ts       # Drizzle schema definitions
 │   │       │   ├── index.ts        # Typed DB helpers

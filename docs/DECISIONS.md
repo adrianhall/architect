@@ -901,3 +901,7 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 ### `/* istanbul ignore next */` on defensive re-fetch branch in `updateUserRole`
 
 **Decision:** The `updateUserRole` function re-fetches the updated user row after the `UPDATE` statement to return the current `diagramCount`. If the re-fetch returns no row (impossible in practice since we just updated the row), the function throws `RepositoryError(INTERNAL_ERROR, 500, ...)`. This branch is marked `/* istanbul ignore next */` per AGENTS.md's defensive programming triage policy. The comment is in place; the line appears in the coverage summary but is excluded from branch counting.
+
+### Follow-on: promoted to `src/worker/src/repositories/` with barrel export
+
+**Decision:** Immediately after GitHub Issue #37 landed, the repository module was promoted from `src/worker/src/routes/admin/users.repository.ts` into a dedicated `src/worker/src/repositories/` package. `RepositoryError` and the shared `Db` type alias were extracted to `repositories/types.ts`; `users.repository.ts` imports from there. A barrel `repositories/index.ts` re-exports the full public API so route handlers import from `../../repositories` without knowing the internal layout. Test files were moved to `repositories/__tests__/` to follow the AGENTS.md convention. The follow-on was made before any new commits reached `main` so the repository structure reflects this organisation from the start.
