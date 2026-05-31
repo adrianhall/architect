@@ -168,7 +168,7 @@ Note that the early issues were driven by files in `docs/issues/ISSUE-*.md` - en
 Stage all changes and create a **single** conventional commit:
 
 ```text
-<type>(issue-$1): <short description>
+<type>(#$1): <short description>
 
 <optional body: bullet list of what was implemented>
 ```
@@ -178,14 +178,14 @@ Rules:
 - **type**: `feat` for new functionality, `fix` for bug fixes, `chore` for
   scaffolding / config / tooling, `test` for tests-only, `docs` for docs-only,
   `refactor` for refactoring without behaviour change.
-- **scope**: `issue-$1` (e.g. `issue-01`).
+- **scope**: `#$1` (e.g. `#1`).
 - **short description**: imperative mood, ≤72 characters, no trailing period.
 - **body** (optional but encouraged): brief bullet list of the main things added.
 
 Example:
 
 ```text
-feat(issue-01): project structure, workspaces, and quality scripts
+feat(#1): project structure, workspaces, and quality scripts
 
 - Root npm workspaces with src/worker and src/frontend
 - Biome config with recommended rules
