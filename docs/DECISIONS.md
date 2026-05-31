@@ -784,3 +784,37 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 **Decision:** Upgrading `@types/node` to `^25.x` (which corresponds to Node.js 25 type definitions) revealed a pre-existing Node.js 25 runtime deprecation warning: `[DEP0205] DeprecationWarning: module.register() is deprecated. Use module.registerHooks() instead.` This warning appears during `npm run build` and originates from Vite's internal module loader (Vite uses `module.register()` to support ESM loader hooks). It is not our code, not related to the type definitions themselves, and does not affect the build output or runtime behavior.
 
 **Resolution:** Accepted as a known tooling issue. The warning will be resolved when Vite migrates its internal loader to use `module.registerHooks()`. No action required in this project; the build, type check, and all tests continue to pass without errors.
+
+---
+
+## GitHub Issue #2 — Upgrade Vite 6→8 + @vitejs/plugin-react 4→6 (Rolldown migration)
+
+### `build.rolldownOptions` with `codeSplitting.groups` replaces deprecated `rollupOptions` + `manualChunks`
+
+**Decision:** Vite 8's migration guide deprecates `build.rollupOptions` (renamed to `build.rolldownOptions`) and removes the object form of `output.manualChunks` while deprecating the function form. The Rolldown `codeSplitting.groups` API is the successor. Both the deprecated function form of `manualChunks` and the new `codeSplitting.groups` are acceptable per the issue spec; we chose full migration.
+
+**Implementation:** `build.rolldownOptions` replaces `build.rollupOptions`. `output.codeSplitting.groups` (array of `{ name, test }` objects where `test` is a regex matched against the resolved module path) replaces the `manualChunks` function form. The same eight vendor chunks are produced: `vendor-react`, `vendor-router`, `vendor-query`, `vendor-zustand`, `vendor-ui`, `vendor-flow`, `vendor-elk`, `vendor-misc`.
+
+**Ordering rationale:** Rolldown's default `includeDependenciesRecursively: true` behaviour means each group also captures its matched modules' transitive dependencies — unless those dependencies were claimed by an earlier group. `vendor-react` is therefore listed **first** so that the React runtime (`react`, `react-dom`, `scheduler`) is always assigned to its own chunk rather than being absorbed into a higher-level library chunk that depends on it (e.g. `vendor-flow`, `vendor-ui`). This is the opposite of the `manualChunks` function form ordering (where each module was tested in isolation, making the order irrelevant for cross-chunk dependency assignment).
+
+### `rolldown-runtime` chunk is new and expected
+
+**Decision:** When `codeSplitting.groups` is used, Rolldown unconditionally emits a `rolldown-runtime` chunk (~0.95 kB minified, ~0.56 kB gzipped). Per the Rolldown documentation, this chunk contains the runtime helpers (`__esm`, `__export`, etc.) that must execute before all other chunks to prevent circular-import ordering errors. This chunk is tiny and has negligible impact on loading performance.
+
+**Resolution:** Accepted. The new chunk is expected behaviour when using `codeSplitting.groups` and is documented in the Rolldown manual-code-splitting guide. No action required.
+
+### `@tailwindcss/vite` confirmed compatible with Vite 8 — no update required
+
+**Decision:** `@tailwindcss/vite@4.3.0` declares its peer dependency as `'^5.2.0 || ^6 || ^7 || ^8'`, which explicitly includes Vite 8. No version bump was required.
+
+### `[DEP0205]` Node.js deprecation now appears in more places
+
+**Decision:** The `[DEP0205] DeprecationWarning: module.register() is deprecated` warning (first documented in the ISSUE-23 section above) now appears in `npm run test:e2e` output as well as `npm run build`. The root cause and resolution are unchanged — this is a Vite/Node.js 22+ issue unrelated to our code.
+
+**Resolution:** Accepted. No action required.
+
+### `copyCatalogIcons` plugin extended with `configureServer` hook for dev-mode icon serving
+
+**Decision:** After the Vite 6→8 upgrade the existing bug that icons were broken when running `npm run start:frontend` (Vite dev server) became visible. The root cause was always present: the `copyCatalogIcons` plugin only had a `closeBundle` hook, which is a build-only hook that never fires in `vite dev` mode. No production build equals no icons copied equals 404 for every `/catalog/icons/*.svg` request. The bug was not noticed before because the primary dev workflow uses `npm start` (wrangler dev + pre-built frontend) which does include the copied icons.
+
+**Resolution:** Added a `configureServer` hook to the plugin that registers a Connect middleware on the Vite dev server. The middleware intercepts `GET /catalog/icons/<fileName>` requests, validates the resolved path stays within the `catalog/icons/` source directory (path-traversal guard using `path.relative`), reads the file with `readFileSync`, and responds with `Content-Type: image/svg+xml`. This makes icons work in `vite dev` mode without wrangler and without any build step, while leaving the `closeBundle` production copy logic unchanged.
