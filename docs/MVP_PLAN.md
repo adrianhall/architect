@@ -149,7 +149,8 @@ architect/
 │   │       │   ├── diagrams.ts     # CRUD: /api/diagrams
 │   │       │   ├── catalog.ts      # GET /api/catalog
 │   │       │   └── admin/
-│   │       │       └── users.ts    # /api/admin/users
+│   │       │       ├── users.ts              # /api/admin/users (thin Hono shim)
+│   │       │       └── users.repository.ts   # All DB + business logic for admin users
 │   │       ├── db/
 │   │       │   ├── schema.ts       # Drizzle schema definitions
 │   │       │   ├── index.ts        # Typed DB helpers

@@ -347,6 +347,20 @@ describe("PATCH /api/admin/users/:id/role", () => {
 		const body = (await res.json()) as ErrorBody;
 		expect(body.error.code).toBe("NOT_FOUND");
 	});
+
+	it("returns 400 VALIDATION_ERROR when request body is not valid JSON", async () => {
+		const req = await adminRequest(`/api/admin/users/${USER_A_ID}/role`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: "this is not json {{{",
+		});
+		const res = await app.fetch(req, env);
+
+		expect(res.status).toBe(400);
+		const body = (await res.json()) as ErrorBody;
+		expect(body.error.code).toBe("VALIDATION_ERROR");
+		expect(body.error.message).toMatch(/valid JSON/i);
+	});
 });
 
 // ── DELETE /api/admin/users/:id ───────────────────────────────────────────────
