@@ -1,5 +1,5 @@
 import type { CatalogData } from "@architect/shared";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Node } from "@xyflow/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -85,7 +85,6 @@ describe("NodeProperties", () => {
 	});
 
 	afterEach(() => {
-		vi.restoreAllMocks();
 		resetStore();
 	});
 
@@ -108,34 +107,37 @@ describe("NodeProperties", () => {
 		expect(input.value).toBe("My Worker");
 	});
 
-	it("calls updateNodeData with the new label on input change", async () => {
+	it("updates the store node label when the label input changes", async () => {
 		const node = makeNode();
 		useDiagramStore.setState({ nodes: [node] });
-		const updateNodeData = vi.spyOn(useDiagramStore.getState(), "updateNodeData");
 
 		await renderNodeProperties(node);
 
+		// fireEvent.change sets the full value in one event — the correct way to
+		// test controlled inputs where onChange fires with e.target.value.
 		const input = screen.getByLabelText("Label");
-		await userEvent.clear(input);
-		await userEvent.type(input, "My Workers");
+		fireEvent.change(input, { target: { value: "My Workers" } });
 
-		expect(updateNodeData).toHaveBeenCalledWith("node-1", { label: expect.any(String) });
+		// Assert on observable side effect: the store's node label has been updated.
+		expect(useDiagramStore.getState().nodes[0].data.label).toBe("My Workers");
 	});
 
-	it("rejects label values over 80 characters (does not call updateNodeData)", async () => {
+	it("rejects label values over 80 characters (store label does not exceed 80 chars)", async () => {
 		const existingLabel = "A".repeat(80);
 		const node = makeNode({ data: { label: existingLabel, serviceTypeId: "workers" } });
 		useDiagramStore.setState({ nodes: [node] });
-		const updateNodeData = vi.spyOn(useDiagramStore.getState(), "updateNodeData");
 
 		await renderNodeProperties(node);
 
 		const input = screen.getByLabelText("Label") as HTMLInputElement;
-		// Type one more character beyond the limit — it should be rejected.
-		await userEvent.type(input, "Z");
+		// Attempt to set a value that exceeds the 80-char limit.
+		fireEvent.change(input, { target: { value: "A".repeat(81) } });
 
-		// updateNodeData should not have been called because the value would exceed 80 chars.
-		expect(updateNodeData).not.toHaveBeenCalledWith("node-1", { label: "A".repeat(81) });
+		// Assert on observable side effect: the store's label must not exceed 80 chars.
+		// The component guard (value.length <= 80) blocks the update, so the store
+		// retains the original 80-char label.
+		const storedLabel = useDiagramStore.getState().nodes[0].data.label as string | undefined;
+		expect((storedLabel ?? "").length).toBeLessThanOrEqual(80);
 	});
 
 	it("renders the description textarea with the current node description", async () => {
@@ -147,17 +149,17 @@ describe("NodeProperties", () => {
 		expect(textarea.value).toBe("My desc");
 	});
 
-	it("calls updateNodeData with the new description on textarea change", async () => {
+	it("updates the store node description when the description textarea changes", async () => {
 		const node = makeNode();
 		useDiagramStore.setState({ nodes: [node] });
-		const updateNodeData = vi.spyOn(useDiagramStore.getState(), "updateNodeData");
 
 		await renderNodeProperties(node);
 
 		const textarea = screen.getByLabelText("Description");
-		await userEvent.type(textarea, "Hello");
+		fireEvent.change(textarea, { target: { value: "Hello" } });
 
-		expect(updateNodeData).toHaveBeenCalledWith("node-1", { description: expect.any(String) });
+		// Assert on observable side effect: the store's node description has been updated.
+		expect(useDiagramStore.getState().nodes[0].data.description).toBe("Hello");
 	});
 
 	it("rejects description values over 500 characters", async () => {
@@ -166,15 +168,16 @@ describe("NodeProperties", () => {
 			data: { label: "Workers", serviceTypeId: "workers", description: existingDesc },
 		});
 		useDiagramStore.setState({ nodes: [node] });
-		const updateNodeData = vi.spyOn(useDiagramStore.getState(), "updateNodeData");
 
 		await renderNodeProperties(node);
 
 		const textarea = screen.getByLabelText("Description");
-		await userEvent.type(textarea, "Z");
+		// Attempt to set a value that exceeds the 500-char limit.
+		fireEvent.change(textarea, { target: { value: "A".repeat(501) } });
 
-		// Should not have been called with a description exceeding 500 chars.
-		expect(updateNodeData).not.toHaveBeenCalledWith("node-1", { description: "A".repeat(501) });
+		// Assert on observable side effect: the store's description must not exceed 500 chars.
+		const storedDesc = useDiagramStore.getState().nodes[0].data.description as string | undefined;
+		expect((storedDesc ?? "").length).toBeLessThanOrEqual(500);
 	});
 
 	it("shows the category default color when no accentColor override is set", async () => {
@@ -208,19 +211,19 @@ describe("NodeProperties", () => {
 		expect(screen.getByTitle("Reset to category default")).toBeInTheDocument();
 	});
 
-	it("calls updateNodeData with accentColor: undefined when reset button is clicked", async () => {
+	it("clears the accentColor in the store when the reset button is clicked", async () => {
 		const node = makeNode({
 			data: { label: "Workers", serviceTypeId: "workers", accentColor: "#ff0000" },
 		});
 		useDiagramStore.setState({ nodes: [node] });
-		const updateNodeData = vi.spyOn(useDiagramStore.getState(), "updateNodeData");
 
 		await renderNodeProperties(node);
 
 		const resetBtn = screen.getByTitle("Reset to category default");
 		await userEvent.click(resetBtn);
 
-		expect(updateNodeData).toHaveBeenCalledWith("node-1", { accentColor: undefined });
+		// Assert on observable side effect: accentColor is cleared in the store.
+		expect(useDiagramStore.getState().nodes[0].data.accentColor).toBeUndefined();
 	});
 
 	it("renders the documentation link button when the service has a docUrl", async () => {

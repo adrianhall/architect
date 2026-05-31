@@ -840,3 +840,44 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 **Decision:** After the jsdom upgrade, overall branch coverage remains at 89.76% — identical to the pre-upgrade state. This is a pre-existing project-wide condition that was present before GitHub Issue #3 and is not caused or worsened by the jsdom upgrade.
 
 **Resolution:** No action taken in this issue. The pre-existing coverage gaps span worker route edge-case branches, optimistic update mutations, and entry-point files (`main.tsx`) that are not unit-testable. These were accepted in their respective implementation issues. A dedicated coverage improvement issue can address them separately.
+
+---
+
+## GitHub Issue #4 — Upgrade Zustand 4→5
+
+### All v5 breaking changes validated as no-ops for this codebase
+
+**Decision:** Before upgrading, every item in the [Zustand v5 migration guide](https://raw.githubusercontent.com/pmndrs/zustand/refs/heads/main/docs/reference/migrations/migrating-to-v5.md) was audited against the codebase:
+
+| Migration item | Status |
+|---|---|
+| Drop default exports | Both stores already use `import { create } from "zustand"` — named exports only |
+| `use-sync-external-store` peer dep | Only needed for `createWithEqualityFn`/`useStoreWithEqualityFn`; neither used |
+| Stricter `setState` types with `replace: true` | No `replace: true` calls anywhere (production or tests) |
+| Persist middleware behavioral change | Persist middleware not used |
+| Stable selector outputs (infinite loop risk) | All selectors return direct state refs, booleans, or function references — no inline `filter`/`map`/`{}` |
+| Custom equality functions (`shallow`) | Not used |
+
+**Resolution:** Only a version bump was required. No production source code changes were needed.
+
+### Dual Zustand versions in the bundle (v4 for @xyflow/react, v5 for app code)
+
+**Decision:** `@xyflow/react` declares `"zustand": "^4.4.0"` as a regular dependency. After upgrading our workspace to `^5.0.0`, npm correctly installs v5 in `src/frontend/node_modules/zustand` for our code and retains v4 in root `node_modules/zustand` for `@xyflow/react`. Vite's module resolution keeps the two Zustand instances fully isolated — our stores resolve to v5, React Flow's internals resolve to v4. There is no runtime conflict.
+
+**Trade-off:** The Vite bundle contains two Zustand copies (v5 in `vendor-zustand` ~3.40 kB; v4 inlined in `vendor-flow`). This is negligible in practice. When `@xyflow/react` publishes a Zustand v5-compatible release, npm will deduplicate to a single copy automatically. Tracked in GitHub Issue #35.
+
+### `vi.spyOn` on Zustand state methods replaced with observable assertions
+
+**Decision:** `EdgeProperties.test.tsx` and `NodeProperties.test.tsx` used `vi.spyOn(useDiagramStore.getState(), "updateEdge/updateEdgeData/updateNodeData")` to assert that store methods were called. Per AGENTS.md, this pattern is prohibited because Zustand's `setState` creates new state objects via `Object.assign({}, prevState, patch)`, copying the spy wrapper into each new state while `vi.restoreAllMocks()` only restores the original object — leaving stale spies with accumulated call counts across tests. This is silently unreliable in v4 and may break more explicitly in v5.
+
+**Resolution:** All `vi.spyOn` calls on Zustand state methods were removed. Tests now assert on observable store state directly (e.g. `useDiagramStore.getState().edges[0].type === "trigger"` instead of `expect(updateEdge).toHaveBeenCalledWith(...)`).
+
+### `fireEvent.change` instead of `userEvent.type` for controlled-input assertions
+
+**Decision:** The components (`EdgeProperties`, `NodeProperties`) use fully controlled inputs — the displayed value is bound to a static `edge`/`node` prop that never changes during the test. With `userEvent.type`, React reconciles the input back to the controlled value after each keystroke, so each `onChange` fires with only the single character just typed. The store ends up with the last typed character, not the accumulated string.
+
+**Resolution:** Tests that need to verify the store was updated with a specific string value now use `fireEvent.change(input, { target: { value: "HTTPS" } })`. This fires `onChange` once with the complete target value, matching how a real change event reaches the handler in practice.
+
+### Branch coverage improved from 89.76% to 90.23%
+
+**Decision:** The `vi.spyOn` removal incidentally improved branch coverage: the spy restoration pattern was masking some branches as covered that were in fact exercised only by the stub, not the real code path. After the refactor, all 665 tests pass and coverage is above the 90% threshold on all four metrics (statements 94.55%, branches 90.23%, functions 95.58%, lines 95.76%).

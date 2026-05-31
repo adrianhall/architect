@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Edge } from "@xyflow/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -38,7 +38,6 @@ describe("EdgeProperties", () => {
 	});
 
 	afterEach(() => {
-		vi.restoreAllMocks();
 		resetStore();
 	});
 
@@ -65,17 +64,17 @@ describe("EdgeProperties", () => {
 		expect(dataFlowButton.className).not.toMatch(/border-primary/);
 	});
 
-	it("calls updateEdge with the selected type when an edge type button is clicked", async () => {
+	it("updates the store edge type when an edge type button is clicked", async () => {
 		const edge = makeEdge({ type: "data-flow" });
 		useDiagramStore.setState({ edges: [edge] });
-		const updateEdge = vi.spyOn(useDiagramStore.getState(), "updateEdge");
 
 		await renderEdgeProperties(edge);
 
 		const triggerButton = screen.getByText("Trigger").closest("button") as HTMLButtonElement;
 		await userEvent.click(triggerButton);
 
-		expect(updateEdge).toHaveBeenCalledWith("edge-1", { type: "trigger" });
+		// Assert on observable side effect: the store's edge type has changed.
+		expect(useDiagramStore.getState().edges[0].type).toBe("trigger");
 	});
 
 	it("renders the label input with the current edge label", async () => {
@@ -85,17 +84,19 @@ describe("EdgeProperties", () => {
 		expect(input.value).toBe("HTTP");
 	});
 
-	it("calls updateEdgeData with the new label on label input change", async () => {
+	it("updates the store edge label when the label input changes", async () => {
 		const edge = makeEdge();
 		useDiagramStore.setState({ edges: [edge] });
-		const updateEdgeData = vi.spyOn(useDiagramStore.getState(), "updateEdgeData");
 
 		await renderEdgeProperties(edge);
 
+		// fireEvent.change sets the full value in one event — the correct way to
+		// test controlled inputs where onChange fires with e.target.value.
 		const input = screen.getByLabelText("Label");
-		await userEvent.type(input, "HTTPS");
+		fireEvent.change(input, { target: { value: "HTTPS" } });
 
-		expect(updateEdgeData).toHaveBeenCalledWith("edge-1", { label: expect.any(String) });
+		// Assert on observable side effect: the store's edge label has been updated.
+		expect(useDiagramStore.getState().edges[0].data?.label).toBe("HTTPS");
 	});
 
 	it("renders the protocol input with the current edge protocol", async () => {
@@ -105,17 +106,17 @@ describe("EdgeProperties", () => {
 		expect(input.value).toBe("HTTPS");
 	});
 
-	it("calls updateEdgeData with the new protocol on protocol input change", async () => {
+	it("updates the store edge protocol when the protocol input changes", async () => {
 		const edge = makeEdge();
 		useDiagramStore.setState({ edges: [edge] });
-		const updateEdgeData = vi.spyOn(useDiagramStore.getState(), "updateEdgeData");
 
 		await renderEdgeProperties(edge);
 
 		const input = screen.getByLabelText("Protocol");
-		await userEvent.type(input, "HTTPS");
+		fireEvent.change(input, { target: { value: "HTTPS" } });
 
-		expect(updateEdgeData).toHaveBeenCalledWith("edge-1", { protocol: expect.any(String) });
+		// Assert on observable side effect: the store's edge protocol has been updated.
+		expect(useDiagramStore.getState().edges[0].data?.protocol).toBe("HTTPS");
 	});
 
 	it("renders the description textarea with the current edge description", async () => {
@@ -125,33 +126,34 @@ describe("EdgeProperties", () => {
 		expect(textarea.value).toBe("Connection between services");
 	});
 
-	it("calls updateEdgeData with the new description on description textarea change", async () => {
+	it("updates the store edge description when the description textarea changes", async () => {
 		const edge = makeEdge();
 		useDiagramStore.setState({ edges: [edge] });
-		const updateEdgeData = vi.spyOn(useDiagramStore.getState(), "updateEdgeData");
 
 		await renderEdgeProperties(edge);
 
 		const textarea = screen.getByLabelText("Description");
-		await userEvent.type(textarea, "My description");
+		fireEvent.change(textarea, { target: { value: "My description" } });
 
-		expect(updateEdgeData).toHaveBeenCalledWith("edge-1", { description: expect.any(String) });
+		// Assert on observable side effect: the store's edge description has been updated.
+		expect(useDiagramStore.getState().edges[0].data?.description).toBe("My description");
 	});
 
 	it("rejects label values over 80 characters", async () => {
 		const existingLabel = "A".repeat(80);
 		const edge = makeEdge({ data: { label: existingLabel } });
 		useDiagramStore.setState({ edges: [edge] });
-		const updateEdgeData = vi.spyOn(useDiagramStore.getState(), "updateEdgeData");
 
 		await renderEdgeProperties(edge);
 
-		const input = screen.getByLabelText("Label") as HTMLInputElement;
-		await userEvent.type(input, "Z");
+		const input = screen.getByLabelText("Label");
+		// Attempt to set a value that exceeds the 80-char limit.
+		fireEvent.change(input, { target: { value: "A".repeat(81) } });
 
-		// Should not have been called with a label exceeding 80 chars.
-		expect(updateEdgeData).not.toHaveBeenCalledWith("edge-1", {
-			label: "A".repeat(81),
-		});
+		// Assert on observable side effect: the store's label must not exceed 80 chars.
+		// The component guard (value.length <= 80) blocks the update, so the store
+		// retains the original 80-char label.
+		const storedLabel = useDiagramStore.getState().edges[0].data?.label as string | undefined;
+		expect((storedLabel ?? "").length).toBeLessThanOrEqual(80);
 	});
 });
