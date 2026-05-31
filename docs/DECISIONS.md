@@ -768,3 +768,19 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 **Decision:** The issue spec lists six specific named chunks (`vendor-react`, `vendor-router`, `vendor-query`, `vendor-ui`, `vendor-flow`, `vendor-zustand`). The build produces an additional `vendor-misc` chunk (~91 kB) that contains transitive dependencies of Radix UI components (`react-remove-scroll`, `react-remove-scroll-bar`, `react-style-singleton`, `use-sidecar`, `aria-hidden`, `get-nonce`). These packages have their own `node_modules/` paths but are not under `@radix-ui/`, so they fall through to the generic catch-all.
 
 **Resolution:** Accepted. The `vendor-misc` chunk is 91 kB — well below the 200 kB limit — and is loaded for routes that use Radix UI components. Adding explicit patterns for every Radix transitive dependency would be brittle (they may change between minor Radix releases). The acceptance criterion requires the six named chunks to exist, not that they be the only chunks.
+
+---
+
+## GitHub Issue #1 — Bulk type definition update
+
+### npm resolved to newer patch versions than issue specified
+
+**Decision:** The issue acceptance criteria specifies `@cloudflare/workers-types@^4.20260530.1` and `@types/node@^25.0.0`. Running `npm install --save-dev @cloudflare/workers-types@^4.20260530.1` resolved to `^4.20260531.1` (the latest daily patch at time of installation), and `npm install --save-dev @types/node@^25.0.0` resolved to `^25.9.1`. This is standard npm behavior — npm resolves to the latest version within the semver range and saves that resolved version as the constraint.
+
+**Resolution:** Accepted. Both resolved versions satisfy the issue's intent (keeping type definitions current) and are strictly newer than the specified minimums. No manual downgrade to the exact specified version is warranted.
+
+### `[DEP0205]` Node.js deprecation warning in Vite build output
+
+**Decision:** Upgrading `@types/node` to `^25.x` (which corresponds to Node.js 25 type definitions) revealed a pre-existing Node.js 25 runtime deprecation warning: `[DEP0205] DeprecationWarning: module.register() is deprecated. Use module.registerHooks() instead.` This warning appears during `npm run build` and originates from Vite's internal module loader (Vite uses `module.register()` to support ESM loader hooks). It is not our code, not related to the type definitions themselves, and does not affect the build output or runtime behavior.
+
+**Resolution:** Accepted as a known tooling issue. The warning will be resolved when Vite migrates its internal loader to use `module.registerHooks()`. No action required in this project; the build, type check, and all tests continue to pass without errors.
