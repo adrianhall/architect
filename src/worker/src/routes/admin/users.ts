@@ -1,7 +1,6 @@
 import { drizzle } from "drizzle-orm/d1";
-import { type Context, Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { ErrorCode } from "../../lib/errors";
+import { Hono } from "hono";
+import { convertErrorOrThrow, ErrorCode } from "../../lib/errors";
 import { error, success } from "../../lib/response";
 import type { AuthVariables } from "../../middleware/auth";
 import {
@@ -9,7 +8,6 @@ import {
 	deleteUser,
 	type ListParams,
 	listUsers,
-	RepositoryError,
 	resolveActor,
 	serializeAdminUser,
 	updateUserRole,
@@ -194,18 +192,5 @@ adminUsersRouter.delete("/:id", async (c) => {
 		return convertErrorOrThrow(c, err);
 	}
 });
-
-/**
- * Helper function to convert a repository error into JSON or throw the original error.
- * @param err The error
- * @param c The Hono context
- * @returns A JSON response object
- */
-export function convertErrorOrThrow(c: Context, err: unknown) {
-	if (err instanceof RepositoryError) {
-		return c.json(error(err.code, err.message), err.statusHint as ContentfulStatusCode);
-	}
-	throw err;
-}
 
 export default adminUsersRouter;

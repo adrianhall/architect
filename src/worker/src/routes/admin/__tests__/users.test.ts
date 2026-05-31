@@ -5,10 +5,9 @@ import type { Context } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { diagrams, users } from "../../../db/schema";
 import app from "../../../index";
-import { ErrorCode } from "../../../lib/errors";
+import { convertErrorOrThrow, ErrorCode } from "../../../lib/errors";
 import { RepositoryError } from "../../../repositories";
 import { createAuthenticatedRequest, createTestDiagram, createTestUser } from "../../../test/helpers";
-import { convertErrorOrThrow } from "../users";
 
 /**
  * Integration tests for the `/api/admin/users` endpoint set.
