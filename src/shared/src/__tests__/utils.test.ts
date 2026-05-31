@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getValueOrDefault } from "../utils.js";
+import { getValueOrDefault, parseIntOrDefault } from "../utils.js";
 
 describe("getValueOrDefault", () => {
 	// ── non-nullish values pass through unchanged ────────────────────────────
@@ -73,5 +73,39 @@ describe("getValueOrDefault", () => {
 	it("works with Record type: returns defaultValue when undefined", () => {
 		const def: Record<string, unknown> = { a: 1 };
 		expect(getValueOrDefault(undefined, def)).toBe(def);
+	});
+});
+
+describe("parseIntOrDefault", () => {
+	// ── valid integers pass through unchanged ────────────────────────────────
+
+	it("returns the value when it is a positive integer", () => {
+		expect(parseIntOrDefault(42, 1)).toBe(42);
+	});
+
+	it("returns the value when it is zero (falsy but valid)", () => {
+		expect(parseIntOrDefault(0, 99)).toBe(0);
+	});
+
+	it("returns the value when it is a negative integer", () => {
+		expect(parseIntOrDefault(-5, 0)).toBe(-5);
+	});
+
+	it("returns the value when produced by a successful Number.parseInt", () => {
+		expect(parseIntOrDefault(Number.parseInt("7", 10), 1)).toBe(7);
+	});
+
+	// ── NaN triggers the default ─────────────────────────────────────────────
+
+	it("returns defaultValue when value is NaN (non-numeric string)", () => {
+		expect(parseIntOrDefault(Number.parseInt("abc", 10), 1)).toBe(1);
+	});
+
+	it("returns defaultValue when value is NaN (empty string)", () => {
+		expect(parseIntOrDefault(Number.parseInt("", 10), 20)).toBe(20);
+	});
+
+	it("returns defaultValue when Number.isNaN(value) is true", () => {
+		expect(parseIntOrDefault(Number.NaN, 99)).toBe(99);
 	});
 });

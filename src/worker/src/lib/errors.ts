@@ -1,3 +1,7 @@
+import type { Context } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { error } from "./response";
+
 /**
  * API error code constants for the CF-Architect application.
  *
@@ -44,3 +48,78 @@ export const ErrorCode = {
  * ```
  */
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
+
+/**
+ * Error thrown by repository functions to signal a domain-level failure.
+ *
+ * Each instance carries an {@link ErrorCode} and a suggested HTTP status code
+ * (`statusHint`). Route handlers catch this class via {@link convertErrorOrThrow},
+ * which maps it directly to an API error response and re-throws anything else:
+ *
+ * ```ts
+ * try {
+ *   const result = await updateUserRole(db, actor, targetId, role);
+ *   return c.json(success(serializeAdminUser(result)));
+ * } catch (err) {
+ *   return convertErrorOrThrow(c, err);
+ * }
+ * ```
+ *
+ * Non-repository errors (unexpected DB failures, etc.) are re-thrown by
+ * `convertErrorOrThrow` and handled by the global Hono error handler.
+ *
+ * @example
+ * ```ts
+ * throw new RepositoryError(ErrorCode.NOT_FOUND, 404, "User not found");
+ * ```
+ */
+export class RepositoryError extends Error {
+	/**
+	 * @param code - One of the {@link ErrorCode} constants to include in the
+	 *   API error response body.
+	 * @param statusHint - Suggested HTTP status code (e.g., 400, 401, 404, 500).
+	 * @param message - Human-readable description of the error.
+	 */
+	constructor(
+		public readonly code: ErrorCode,
+		public readonly statusHint: number,
+		message: string,
+	) {
+		super(message);
+		this.name = "RepositoryError";
+	}
+}
+
+/**
+ * Converts a {@link RepositoryError} to a JSON API error response, or
+ * re-throws any other error unchanged.
+ *
+ * Use this as the single catch handler in every route handler that calls
+ * repository functions. It eliminates per-error `if` blocks: known domain
+ * errors are mapped to their HTTP equivalents; unexpected errors (DB failures,
+ * programmer mistakes) propagate to Hono's global error handler which returns
+ * 500 Internal Server Error.
+ *
+ * @param c - The Hono `Context` for the current request.
+ * @param err - The caught value (typed as `unknown` because `catch` bindings
+ *   may be anything at runtime).
+ * @returns A JSON response body when `err` is a `RepositoryError`.
+ * @throws The original `err` when it is not a `RepositoryError`.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   const actor = await resolveActor(db, actorEmail);
+ *   const updated = await updateUserRole(db, actor, targetId, role);
+ *   return c.json(success(serializeAdminUser(updated)));
+ * } catch (err) {
+ *   return convertErrorOrThrow(c, err);
+ * }
+ * ```
+ */
+export function convertErrorOrThrow(c: Context, err: unknown) {
+	if (err instanceof RepositoryError) {
+		return c.json(error(err.code, err.message), err.statusHint as ContentfulStatusCode);
+	}
+	throw err;
+}

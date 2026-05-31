@@ -881,3 +881,27 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 ### Branch coverage improved from 89.76% to 90.23%
 
 **Decision:** The `vi.spyOn` removal incidentally improved branch coverage: the spy restoration pattern was masking some branches as covered that were in fact exercised only by the stub, not the real code path. After the refactor, all 665 tests pass and coverage is above the 90% threshold on all four metrics (statements 94.55%, branches 90.23%, functions 95.58%, lines 95.76%).
+
+---
+
+## GitHub Issue #37 — Refactor admin users route to repository pattern with typed errors
+
+### `RepositoryError` defined in `users.repository.ts`, not `errors.ts`
+
+**Decision:** The issue spec suggested either extending the existing `ErrorCode` infrastructure or introducing a `RepositoryError` class. Since `RepositoryError` is specific to the repository pattern and no other routes currently use repositories, it was defined in `users.repository.ts` rather than the shared `errors.ts`. If future issues extract repositories for other route modules, `RepositoryError` can be promoted to `errors.ts` at that point.
+
+### `auditActionForRole` helper extracted to keep route handler thin
+
+**Decision:** The `PATCH /:id/role` handler needed to compute the audit log action string (`"promote"` or `"demote"`) based on the new role. Rather than embedding the ternary directly in the route handler (which would violate the "route handlers contain only parsing, calling the repo, and serializing" principle), a small `auditActionForRole(role)` helper was extracted to `users.repository.ts`. This keeps 100% of role-related logic inside the repository module.
+
+### `throw err` re-throw branches in route handlers are accepted coverage gaps
+
+**Decision:** Both `PATCH /:id/role` and `DELETE /:id` have a catch block that checks `if (err instanceof RepositoryError)` and re-throws non-matching errors. The `throw err` re-throw branch (lines 155 and 200 in `users.ts`) fires only if Drizzle/D1 throws an unexpected exception (network failure, constraint violation, etc.). This is "error branches that only fire if a third-party library misbehaves" per the AGENTS.md triage policy — accepted as a defensive coverage gap without a test. Overall branch coverage remains above the 90% threshold (90.44%).
+
+### `/* istanbul ignore next */` on defensive re-fetch branch in `updateUserRole`
+
+**Decision:** The `updateUserRole` function re-fetches the updated user row after the `UPDATE` statement to return the current `diagramCount`. If the re-fetch returns no row (impossible in practice since we just updated the row), the function throws `RepositoryError(INTERNAL_ERROR, 500, ...)`. This branch is marked `/* istanbul ignore next */` per AGENTS.md's defensive programming triage policy. The comment is in place; the line appears in the coverage summary but is excluded from branch counting.
+
+### Follow-on: promoted to `src/worker/src/repositories/` with barrel export
+
+**Decision:** Immediately after GitHub Issue #37 landed, the repository module was promoted from `src/worker/src/routes/admin/users.repository.ts` into a dedicated `src/worker/src/repositories/` package. `RepositoryError` and the shared `Db` type alias were extracted to `repositories/types.ts`; `users.repository.ts` imports from there. A barrel `repositories/index.ts` re-exports the full public API so route handlers import from `../../repositories` without knowing the internal layout. Test files were moved to `repositories/__tests__/` to follow the AGENTS.md convention. The follow-on was made before any new commits reached `main` so the repository structure reflects this organisation from the start.
