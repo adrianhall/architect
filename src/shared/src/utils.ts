@@ -46,3 +46,38 @@
 export function getValueOrDefault<T>(value: T | null | undefined, defaultValue: T): T {
 	return value ?? defaultValue;
 }
+
+/**
+ * Returns `value` when it is a finite integer; otherwise returns `defaultValue`.
+ *
+ * This is a named, testable wrapper around the `Number.isNaN` guard that
+ * appears after every `Number.parseInt()` call on an untrusted string (e.g. an
+ * HTTP query parameter). It exists for the same reason as `getValueOrDefault`:
+ * the defensive NaN branch is covered in one place rather than accumulating
+ * uncovered branches at every call site.
+ *
+ * Use this in route handlers that parse numeric query parameters:
+ *
+ * ```ts
+ * const page  = Math.max(1, parseIntOrDefault(Number.parseInt(raw, 10), 1));
+ * ```
+ *
+ * `Number.isNaN` (not the global `isNaN`) is used intentionally: it returns
+ * `true` only for the actual `NaN` value, never for strings such as `"abc"`.
+ * Since `Number.parseInt` always returns either an integer or `NaN`, this
+ * narrower check is exact.
+ *
+ * @param value - The result of a `Number.parseInt` call; may be `NaN`.
+ * @param defaultValue - Returned when `value` is `NaN`.
+ * @returns `value` when it is not `NaN`, otherwise `defaultValue`.
+ *
+ * @example
+ * ```ts
+ * parseIntOrDefault(Number.parseInt("42", 10), 1)   // → 42
+ * parseIntOrDefault(Number.parseInt("abc", 10), 1)  // → 1
+ * parseIntOrDefault(Number.parseInt("", 10), 20)    // → 20
+ * ```
+ */
+export function parseIntOrDefault(value: number, defaultValue: number): number {
+	return Number.isNaN(value) ? defaultValue : value;
+}

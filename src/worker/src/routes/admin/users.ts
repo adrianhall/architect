@@ -1,3 +1,4 @@
+import { parseIntOrDefault } from "@architect/shared";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { convertErrorOrThrow, ErrorCode } from "../../lib/errors";
@@ -80,8 +81,8 @@ adminUsersRouter.get("/", async (c) => {
 	const rawOrder = c.req.query("order") ?? "desc";
 	const search = c.req.query("search");
 
-	const page = Math.max(1, Number.isNaN(rawPage) ? 1 : rawPage);
-	const limit = Math.min(100, Math.max(1, Number.isNaN(rawLimit) ? 20 : rawLimit));
+	const page = Math.max(1, parseIntOrDefault(rawPage, 1));
+	const limit = Math.min(100, Math.max(1, parseIntOrDefault(rawLimit, 20)));
 
 	const params: ListParams = { page, limit, sort: rawSort, order: rawOrder, search };
 
