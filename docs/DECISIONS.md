@@ -812,3 +812,9 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 **Decision:** The `[DEP0205] DeprecationWarning: module.register() is deprecated` warning (first documented in the ISSUE-23 section above) now appears in `npm run test:e2e` output as well as `npm run build`. The root cause and resolution are unchanged — this is a Vite/Node.js 22+ issue unrelated to our code.
 
 **Resolution:** Accepted. No action required.
+
+### `copyCatalogIcons` plugin extended with `configureServer` hook for dev-mode icon serving
+
+**Decision:** After the Vite 6→8 upgrade the existing bug that icons were broken when running `npm run start:frontend` (Vite dev server) became visible. The root cause was always present: the `copyCatalogIcons` plugin only had a `closeBundle` hook, which is a build-only hook that never fires in `vite dev` mode. No production build equals no icons copied equals 404 for every `/catalog/icons/*.svg` request. The bug was not noticed before because the primary dev workflow uses `npm start` (wrangler dev + pre-built frontend) which does include the copied icons.
+
+**Resolution:** Added a `configureServer` hook to the plugin that registers a Connect middleware on the Vite dev server. The middleware intercepts `GET /catalog/icons/<fileName>` requests, validates the resolved path stays within the `catalog/icons/` source directory (path-traversal guard using `path.relative`), reads the file with `readFileSync`, and responds with `Content-Type: image/svg+xml`. This makes icons work in `vite dev` mode without wrangler and without any build step, while leaving the `closeBundle` production copy logic unchanged.
