@@ -69,6 +69,7 @@ authoritative references for this project.
 | jrhouston/dotenv Terraform provider | <https://registry.terraform.io/providers/jrhouston/dotenv/latest/docs> |
 | npm workspaces | <https://docs.npmjs.com/cli/using-npm/workspaces> |
 | React | <https://react.dev/reference/react> |
+| Zustand | <https://github.com/pmndrs/zustand/tree/main/docs> - use markdown files from GitHub instead of the docs site |
 
 ---
 
