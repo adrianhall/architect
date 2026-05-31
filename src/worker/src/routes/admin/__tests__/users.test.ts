@@ -1,10 +1,14 @@
 import { env } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import type { Context } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { diagrams, users } from "../../../db/schema";
 import app from "../../../index";
+import { ErrorCode } from "../../../lib/errors";
+import { RepositoryError } from "../../../repositories";
 import { createAuthenticatedRequest, createTestDiagram, createTestUser } from "../../../test/helpers";
+import { convertErrorOrThrow } from "../users";
 
 /**
  * Integration tests for the `/api/admin/users` endpoint set.
@@ -498,5 +502,42 @@ describe("audit log emission", () => {
 		expect(log?.actor_email).toBe(ADMIN_EMAIL);
 		expect(log?.target_id).toBe(USER_A_ID);
 		expect(log?.target_email).toBe(USER_A_EMAIL);
+	});
+});
+
+// ── convertErrorOrThrow ───────────────────────────────────────────────────────
+
+describe("convertErrorOrThrow", () => {
+	it("calls c.json with the error envelope and statusHint when given a RepositoryError", () => {
+		const json = vi.fn();
+		const c = { json } as unknown as Context;
+
+		const err = new RepositoryError(ErrorCode.NOT_FOUND, 404, "User not found");
+		convertErrorOrThrow(c, err);
+
+		expect(json).toHaveBeenCalledOnce();
+		expect(json).toHaveBeenCalledWith({ error: { code: "NOT_FOUND", message: "User not found" } }, 404);
+	});
+
+	it("maps statusHint correctly for non-404 RepositoryErrors", () => {
+		const json = vi.fn();
+		const c = { json } as unknown as Context;
+
+		const err = new RepositoryError(ErrorCode.SELF_ACTION_FORBIDDEN, 400, "Cannot change your own role");
+		convertErrorOrThrow(c, err);
+
+		expect(json).toHaveBeenCalledWith(
+			{ error: { code: "SELF_ACTION_FORBIDDEN", message: "Cannot change your own role" } },
+			400,
+		);
+	});
+
+	it("re-throws the original error when it is not a RepositoryError", () => {
+		const json = vi.fn();
+		const c = { json } as unknown as Context;
+
+		const err = new Error("unexpected database failure");
+		expect(() => convertErrorOrThrow(c, err)).toThrow(err);
+		expect(json).not.toHaveBeenCalled();
 	});
 });
