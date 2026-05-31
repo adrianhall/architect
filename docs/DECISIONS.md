@@ -818,3 +818,25 @@ TypeScript 6.0 introduces `noUncheckedSideEffectImports: true` as the new defaul
 **Decision:** After the Vite 6→8 upgrade the existing bug that icons were broken when running `npm run start:frontend` (Vite dev server) became visible. The root cause was always present: the `copyCatalogIcons` plugin only had a `closeBundle` hook, which is a build-only hook that never fires in `vite dev` mode. No production build equals no icons copied equals 404 for every `/catalog/icons/*.svg` request. The bug was not noticed before because the primary dev workflow uses `npm start` (wrangler dev + pre-built frontend) which does include the copied icons.
 
 **Resolution:** Added a `configureServer` hook to the plugin that registers a Connect middleware on the Vite dev server. The middleware intercepts `GET /catalog/icons/<fileName>` requests, validates the resolved path stays within the `catalog/icons/` source directory (path-traversal guard using `path.relative`), reads the file with `readFileSync`, and responds with `Content-Type: image/svg+xml`. This makes icons work in `vite dev` mode without wrangler and without any build step, while leaving the `closeBundle` production copy logic unchanged.
+
+---
+
+## GitHub Issue #3 — Upgrade jsdom 26→29 (test environment)
+
+### All 500 frontend tests pass without modification after upgrading to jsdom v29
+
+**Decision:** jsdom was upgraded from `^26.1.0` to `^29.1.1` (the latest resolved patch within the `^29.0.0` range at time of installation). This crosses three major versions (v27, v28, v29), each with documented breaking changes.
+
+**Outcome:** All 665 tests (500 frontend, 80 worker, 85 shared) pass without any test or source code modifications. The upgrade crossed three major versions but none of the breaking changes affected this project:
+
+- **v27**: Added `TextEncoder`/`TextDecoder` to jsdom windows — these were not used directly in any test setup.
+- **v28**: Overhauled resource loading customization API (`resources` option) — the project has no custom jsdom resource loaders; Vitest manages jsdom instantiation.
+- **v29**: Overhauled CSSOM implementation (replaced `cssstyle` + `@acemir/cssom` with `css-tree`) — no tests assert on computed `getComputedStyle()` values.
+
+**Resolution:** No test changes required. The upgrade was seamless.
+
+### Pre-existing branch coverage (89.76%) unchanged by this upgrade
+
+**Decision:** After the jsdom upgrade, overall branch coverage remains at 89.76% — identical to the pre-upgrade state. This is a pre-existing project-wide condition that was present before GitHub Issue #3 and is not caused or worsened by the jsdom upgrade.
+
+**Resolution:** No action taken in this issue. The pre-existing coverage gaps span worker route edge-case branches, optimistic update mutations, and entry-point files (`main.tsx`) that are not unit-testable. These were accepted in their respective implementation issues. A dedicated coverage improvement issue can address them separately.
